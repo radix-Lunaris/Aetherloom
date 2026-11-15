@@ -15,7 +15,7 @@ Ubuntu24.04 2核2GB约30GB；不限制账号房间总数，空间低于10%拒绝
 Python/PySide6；FastAPI/SQLite WAL；独立中继STUN与管理面板。
 ## 阶段
 1 建仓、文档来源、dev同步。
-2 独立启动：manifest继承、参数、依赖、native、assets、Java、账号与GUI。
+2 独立启动：manifest继承、参数、依赖、native、assets、Java、离线游戏账号与GUI；不做正版授权。
 3 单世界修复、Bridge、LAN及生命周期。
 4 认证权限、唯一Host、块存储、恢复审批、AUTO与编排。
 5 Windows/Java17打包、Ubuntu部署、面板、双机实测，验收后合main。

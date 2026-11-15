@@ -7,4 +7,6 @@ dist/
 *.db
 *.db-wal
 *.db-shm
+runtime/
+*.spec
 

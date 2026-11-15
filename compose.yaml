@@ -1,0 +1,24 @@
+services:
+  control:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${AETHERLOOM_BIND:-127.0.0.1}:8765:8765"
+    volumes:
+      - aetherloom-data:/data
+    mem_limit: 512m
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  aetherloom-data:
+

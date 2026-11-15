@@ -1,5 +1,7 @@
 # Sources and licenses
 Current Python implementation is original Aetherloom code. HMCL and PCL code is not included.
+Desktop uses PySide6/Qt (LGPLv3/GPLv3/commercial options); this GPLv3 distribution includes the installed license notices.
+Bundled runtime: Eclipse Temurin OpenJDK17, GPLv2 with Classpath Exception; preserve runtime/legal and runtime/NOTICE.
 Planned imports (not integrated yet):
 - CraftLink: GPLv3; local reviewed dev 8178a3df0e73a88c41bab70574014b98b1c36ffe. Pin and preserve notices when importing.
 - MCsaves-sync: GPLv3; 17afc06e4ef19720afc43b725bac9baaa8d9b062; hash algorithm will not be inherited.

@@ -64,6 +64,8 @@ def coordinate(name):
 def prepare(root, version, java, name, run_dir=None, memory=2048):
     root, java = Path(root).resolve(), Path(java).resolve()
     run = Path(run_dir or root).resolve()
+    if not root.is_dir() or not run.is_dir():
+        raise LaunchError("Game root and run directory must already exist")
     if not re.fullmatch("[A-Za-z0-9_]{1,16}", name):
         raise LaunchError("Invalid offline name")
     if not 512 <= memory <= 65536:
@@ -100,7 +102,7 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
     asset_id = m.get("assetIndex", {}).get("id", m.get("assets", "legacy"))
     index = require(inside(root, f"assets/indexes/{asset_id}.json"))
     if index.is_file():
-        for obj in json.loads(index.read_text()).get("objects", {}).values():
+        for obj in json.loads(index.read_text(encoding="utf-8")).get("objects", {}).values():
             h = obj["hash"]
             if not re.fullmatch("[0-9a-f]{40}", h):
                 raise LaunchError("Invalid asset hash")
@@ -155,5 +157,8 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
 
 def launch(*args, **kwargs):
     command, run = prepare(*args, **kwargs)
-    return subprocess.Popen(command, cwd=run)
+    logs = inside(run, '.aetherloom/logs')
+    logs.mkdir(parents=True, exist_ok=True)
+    with (logs / ('game-' + uuid.uuid4().hex + '.log')).open('wb') as output:
+        return subprocess.Popen(command, cwd=run, stdout=output, stderr=subprocess.STDOUT)
 
