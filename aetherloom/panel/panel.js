@@ -85,7 +85,7 @@ async function refresh(){
  const [status,rooms,users]=await Promise.all([api("status"),api("rooms"),api("users")]);
  el("metrics").replaceChildren(metric("可用磁盘",gib(status.disk_free),"GiB","容量 "+gib(status.disk_total)+" GiB","▱"),
  metric("可用内存",gib(status.memory_available),"GiB","物理内存 "+gib(status.memory_total)+" GiB","▤"),
- metric("共享实例",status.rooms,"个","服务器中的实例记录","▦"),metric("软件账号",status.accounts,"个","独立的软件登录身份","◎"));
+ metric("共享房间",status.rooms,"个","持久世界与当前 Host","▦"),metric("软件账号",status.accounts,"个","独立的软件登录身份","◎"));
  const diskUsed=status.disk_total?100*(1-status.disk_free/status.disk_total):0;
  el("disk-progress").value=diskUsed;el("disk-label").textContent=diskUsed.toFixed(1)+"% · "+gib(status.disk_total-status.disk_free)+" / "+gib(status.disk_total)+" GiB";
  const memUsed=status.memory_total?100*(1-status.memory_available/status.memory_total):0;el("memory-progress").value=memUsed;
@@ -98,7 +98,7 @@ async function refresh(){
 function showView(name){
  document.querySelectorAll(".view").forEach(v=>{v.hidden=v.id!=="view-"+name;});
  document.querySelectorAll("[data-view]").forEach(b=>{const active=b.dataset.view===name;b.classList.toggle("active",active);if(active)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
- el("breadcrumb").textContent=({overview:"服务器概况",instances:"实例与会话",accounts:"账号管理"})[name];
+ el("breadcrumb").textContent=({overview:"服务器概况",instances:"共享房间",accounts:"账号管理"})[name];
 }
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
 el("toggle-password").addEventListener("click",()=>{const visible=el("password").type==="password";el("password").type=visible?"text":"password";el("toggle-password").textContent=visible?"隐藏":"显示";el("toggle-password").setAttribute("aria-label",visible?"隐藏密码":"显示密码");});

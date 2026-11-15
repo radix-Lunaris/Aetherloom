@@ -15,5 +15,9 @@ foreach ($package in @('websockets-15.0.1.dist-info','pillow-13.0.0.dist-info'))
     $notices = Get-ChildItem (Join-Path .venv\Lib\site-packages $package) -Recurse -File | Where-Object { $_.Name -match 'LICENSE|COPYING' }
     foreach ($item in $notices) { Copy-Item -LiteralPath $item.FullName -Destination (Join-Path dist\Aetherloom\licenses ($package + '-' + $item.Name)) }
 }
+$version = (& .\.venv\Scripts\python.exe -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])").Trim()
+$sourceCommit = (& git rev-parse HEAD).Trim()
+$buildInfo = @{ version = $version; source_commit = $sourceCommit; built_utc = [DateTime]::UtcNow.ToString('o'); platform = 'Windows-x64' } | ConvertTo-Json
+[System.IO.File]::WriteAllText((Join-Path (Get-Location) 'dist/Aetherloom/BUILD_INFO.json'), $buildInfo, [System.Text.UTF8Encoding]::new($false))
 Compress-Archive -Path dist\Aetherloom\* -DestinationPath dist\Aetherloom-Windows.zip -Force
 

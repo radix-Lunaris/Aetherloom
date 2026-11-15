@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class BridgeControl:
-    def __init__(self,world,identity,inspect=False):
+    def __init__(self,world,identity,inspect=False,join=None,config_dir=None):
         self.world=Path(world).resolve();self.identity=identity
         self.token=secrets.token_urlsafe(32)
         self.ready=threading.Event();self.saved=threading.Event();self.stop=False;self.port=None
@@ -39,16 +39,19 @@ class BridgeControl:
                         if not ((inspect and port==0) or (not inspect and 1<=port<=65535)):raise ValueError('Invalid port')
                         control.port=port;control.ready.set()
                     elif data['event']=='saved' and control.ready.is_set():control.saved.set()
+                    elif data['event']=='joined' and join:control.ready.set()
                     elif data['event']=='error':control.error='游戏Bridge未能准备世界或LAN，请查看游戏日志'
                     else:raise ValueError('Invalid lifecycle event')
                     self.reply(200,{'ok':True})
                 except (ValueError,KeyError,TypeError):self.reply(400,{'ok':False})
         self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
-        self.config=self.world/'.aetherloom'/('bridge-'+secrets.token_hex(8)+'.json')
+        self.config=Path(config_dir or self.world/'.aetherloom')/('bridge-'+secrets.token_hex(8)+'.json')
         self.config.parent.mkdir(parents=True,exist_ok=True)
-        self.config.write_text(json.dumps({'endpoint':'http://127.0.0.1:'+str(self.server.server_port),
-            'token':self.token,'world':str(self.world),'inspect':inspect}),encoding='utf-8')
+        data={'endpoint':'http://127.0.0.1:'+str(self.server.server_port),
+            'token':self.token,'world':str(self.world),'inspect':inspect,'identity':self.identity}
+        if join:data['join']=join
+        self.config.write_text(json.dumps(data),encoding='utf-8')
 
     def close(self):
         self.server.shutdown();self.server.server_close();self.thread.join(timeout=2)

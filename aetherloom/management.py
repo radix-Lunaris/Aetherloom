@@ -29,9 +29,9 @@ def audit(c, actor, action, target, detail=None):
         (secrets.token_hex(16), actor, action, target, json.dumps(detail or {}, ensure_ascii=False), time.time()))
 
 
-def valid_name(name):
-    if not 2 <= len(name) <= 32 or any(x.isspace() or ord(x) < 32 for x in name):
-        raise ValueError('账号名称应为2至32位，不能包含空白或控制字符')
+def valid_name(name,minimum=2):
+    if not minimum <= len(name) <= 32 or any(x.isspace() or ord(x) < 32 for x in name):
+        raise ValueError(f'账号名称应为{minimum}至32位，不能包含空白或控制字符')
 
 
 def password_hash(password):
@@ -65,7 +65,7 @@ def edit_account(store, actor, target, body, delete=False):
             raise HTTPException(429, '每个自然月改名和改密合计最多3次')
         if delete:
             if row['role']=='admin':
-                admins=c.execute("SELECT a.name FROM accounts a LEFT JOIN account_settings s ON s.name=a.name WHERE a.role='admin' AND COALESCE(s.disabled,0)=0").fetchall()
+                admins=c.execute("SELECT a.name FROM accounts a LEFT JOIN account_settings s ON s.name=a.name WHERE a.role IN ('root','admin') AND COALESCE(s.disabled,0)=0").fetchall()
                 if any(a['name']==target for a in admins) and len(admins)<=1:
                     raise HTTPException(409,'不能删除最后一个可用admin')
             if c.execute('SELECT 1 FROM rooms WHERE owner=?', (target,)).fetchone():
@@ -76,10 +76,6 @@ def edit_account(store, actor, target, body, delete=False):
                 c.execute(f'DELETE FROM {table} WHERE {column}=?', (target,))
             audit(c,actor['name'],'delete_user',target)
             return {'ok':True}
-        if ('disabled' in body and body['disabled']) or ('role' in body and body['role'] == 'player'):
-            enabled_admins = c.execute("SELECT a.name FROM accounts a LEFT JOIN account_settings s ON s.name=a.name WHERE a.role='admin' AND COALESCE(s.disabled,0)=0").fetchall()
-            if row['role'] == 'admin' and len(enabled_admins) <= 1:
-                raise HTTPException(409,'不能停用或降级最后一个可用admin')
         if 'password' in body:
             salt,digest=password_hash(body['password'])
             c.execute('UPDATE accounts SET salt=?,digest=? WHERE name=?',(salt,digest,target))
@@ -91,7 +87,7 @@ def edit_account(store, actor, target, body, delete=False):
             if not isinstance(body['disabled'],bool):raise ValueError('disabled应为布尔值')
             c.execute('UPDATE account_settings SET disabled=? WHERE name=?',(int(body['disabled']),target))
         c.execute('UPDATE account_settings SET month=?,changes=? WHERE name=?',(month,changes+edits,target))
-        if 'password' in body or body.get('disabled') or ('role' in body and body['role'] != row['role']):
+        if 'password' in body or body.get('disabled') or (body.get('role')=='player' and row['role']=='admin'):
             c.execute('DELETE FROM sessions WHERE actor=?',(target,))
         name=body.get('username',target)
         if name != target:

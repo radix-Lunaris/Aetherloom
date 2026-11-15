@@ -6,4 +6,7 @@ build
 __pycache__
 *.zip
 runtime
+.env
+bridge/.gradle
+assets
 

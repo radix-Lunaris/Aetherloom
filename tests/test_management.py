@@ -38,6 +38,8 @@ class ManagementTests(unittest.TestCase):
                 self.assertEqual(c.delete('/api/users/renamed',headers=admin).status_code,200)
                 self.assertEqual(c.post('/api/login',json=dict(username='renamed',password='abcdef')).status_code,401)
                 self.assertTrue(c.get('/api/audit',headers=root).json())
+                # Root counts as an enabled administrator, as in CraftLink.
+                self.assertEqual(c.delete('/api/users/admin',headers=root).status_code,200)
 
     def test_self_service_shared_monthly_budget(self):
         with tempfile.TemporaryDirectory() as d:
@@ -48,3 +50,16 @@ class ManagementTests(unittest.TestCase):
                 for name in ('friend1','friend2','friend3'):
                     self.assertEqual(c.patch('/api/me',headers=headers,json={'username':name}).status_code,200)
                 self.assertEqual(c.patch('/api/me',headers=headers,json={'password':'abcdef'}).status_code,429)
+
+    def test_expired_unpublished_room_can_be_deleted(self):
+        with tempfile.TemporaryDirectory() as d:
+            app=create_app(d);add_user(app.state.store,'owner','123456','player')
+            with TestClient(app) as c:
+                token=c.post('/api/login',json=dict(username='owner',password='123456')).json()['token']
+                headers={'Authorization':'Bearer '+token}
+                room=c.post('/api/rooms',headers=headers,json={'name':'abandoned upload'}).json()['id']
+                lease=c.post('/api/rooms/'+room+'/claim',headers=headers,json={}).json()
+                self.assertEqual(c.delete('/api/rooms/'+room,headers=headers).status_code,409)
+                with app.state.store.connect() as db:db.execute('UPDATE rooms SET expires=0 WHERE id=?',(room,))
+                self.assertEqual(c.delete('/api/rooms/'+room,headers=headers).status_code,200)
+                self.assertEqual(c.post('/api/rooms/'+room+'/renew',headers=headers,json={k:lease[k] for k in ('token','epoch')}).status_code,404)

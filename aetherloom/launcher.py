@@ -179,7 +179,7 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
                 target.write_bytes(z.read(entry))
     return [str(java), f"-Xmx{memory}M", *jvm, m["mainClass"], *game], run
 
-def launch(*args, quick_play=None, bridge_file=None, before_start=None, **kwargs):
+def launch(*args, quick_play=None, bridge_file=None, before_start=None, managed=False, **kwargs):
     command, run = prepare(*args, **kwargs)
     environment=None
     if quick_play:
@@ -188,6 +188,7 @@ def launch(*args, quick_play=None, bridge_file=None, before_start=None, **kwargs
         command.extend(['--quickPlayPath',java_path(run/'.aetherloom/quickplay.json'),'--quickPlay'+mode,value])
     if bridge_file:
         environment=dict(os.environ,AETHERLOOM_BRIDGE_FILE=str(bridge_file))
+    if bridge_file or managed:
         command.insert(1,'-Dsharedplayerdata.disable=true')
     logs = inside(run, '.aetherloom/logs')
     logs.mkdir(parents=True, exist_ok=True)

@@ -45,7 +45,7 @@ class SharedSession:
 
     def game(self,**kwargs):
         b=self.binding
-        process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),before_start=self.guard.check if self.guard else None,**kwargs)
+        process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
         self.process=process;self.notify('process',process)
         return process
 
@@ -60,14 +60,27 @@ class SharedSession:
                 await asyncio.to_thread(self.api,base+'/join',{})
                 port=await self.network.listen(self.room)
                 self.notify('status','已建立本地联机代理，正在启动加入游戏')
-                await asyncio.to_thread(self.game,quick_play=('Multiplayer','127.0.0.1:'+str(port)))
+                b=self.binding
+                jar=assets()/'aetherloom-bridge-0.1.0.jar'
+                if not jar.is_file():raise ValueError('交付包缺少Forge联机Bridge')
+                mods=Path(b['run'])/'mods';mods.mkdir(exist_ok=True);shutil.copy2(jar,mods/jar.name)
+                self.bridge=BridgeControl(b['world'],offline_uuid(b['name']),join='127.0.0.1:'+str(port),config_dir=Path(b['run'])/'.aetherloom/control')
+                await asyncio.to_thread(self.game,bridge_file=self.bridge.config)
+                deadline=time.monotonic()+180
+                while not self.bridge.ready.is_set():
+                    if self.bridge.error:raise ValueError(self.bridge.error)
+                    if self.stop:return
+                    if self.process.poll() is not None or time.monotonic()>deadline:raise ValueError('玩家未能自动加入，请查看Forge握手日志')
+                    await asyncio.sleep(.25)
+                self.notify('status','已自动加入共享世界')
                 checked=0
                 while self.process.poll() is None and not self.stop:
                     if time.monotonic()-checked>5:
                         await asyncio.to_thread(self.api,base+'/membership')
                         current=next((r for r in await asyncio.to_thread(self.api,'/api/rooms') if r['id']==self.room),None)
                         if not current or current['epoch']!=room['epoch'] or current['expires']<=time.time() or current['state']!='ready':
-                            raise ValueError('Host会话已结束，联机通道已关闭；请等待保存后重新开始')
+                            self.notify('status','Host会话已结束，联机通道已关闭；请等待保存后重新开始')
+                            return
                         checked=time.monotonic()
                     await asyncio.sleep(.5)
                 return

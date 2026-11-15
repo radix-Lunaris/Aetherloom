@@ -10,11 +10,12 @@ import uvicorn
 from aetherloom.cloud import API
 from aetherloom.network import Network
 from aetherloom.server import create_app,add_user
+from aetherloom.vendor.craftlink.auto_stream import Frame,Kind
 
 
 class NetworkTests(unittest.TestCase):
     def test_real_websocket_and_udp_transport(self):
-        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{'AETHERLOOM_P2P_BIND':'127.0.0.1:0'}):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{'AETHERLOOM_P2P_BIND':'127.0.0.1:0'}),self.assertNoLogs('uvicorn.error',level='ERROR'):
             app=create_app(d)
             for name in ('host','guest'):add_user(app.state.store,name,'123456','player')
             sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
@@ -77,3 +78,10 @@ class NetworkTests(unittest.TestCase):
             if writer:writer.close()
             await guest.close();await host.close()
             echo_server.close();await echo_server.wait_closed()
+        # A client can close before the Host attaches; shutdown must not leave
+        # that one-sided handler waiting for 15 seconds or emit ASGI errors.
+        orphan=Network(url,guest_api.token,guest_api)
+        info=await asyncio.to_thread(guest_api,'/api/rooms/'+room+'/connections',{})
+        path=await orphan.path(info)
+        await path.send(Frame(Kind.ACK,info['sid'],value=256*1024))
+        await orphan.close()

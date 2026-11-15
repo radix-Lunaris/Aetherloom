@@ -120,8 +120,11 @@ class Relay:
                     if self.authorize:await asyncio.to_thread(self.authorize,p.room,current_user)
                     if current['epoch']!=p.epoch or current['host']!=p.host or current_user['name']!=getattr(p,side):raise ValueError('Host/account changed')
                     checked=time.monotonic()
-                deadline=time.monotonic()+15
+                # A physical attachment can retry without discarding the
+                # logical stream. Bound orphan waits below server shutdown.
+                deadline=time.monotonic()+4
                 while not p.ends.get(opposite):
+                    if p.ends.get(side) is not ws:return
                     p.changed.clear()
                     if p.ends.get(opposite):break
                     await asyncio.wait_for(p.changed.wait(),max(.01,deadline-time.monotonic()))
@@ -131,6 +134,14 @@ class Relay:
             pass
         finally:
             if p and p.ends.get(side) is ws:
-                p.ends.pop(side,None);p.changed.set();p.touched=time.monotonic()
+                p.ends.pop(side,None)
+                # Detach both physical ends of this one SID. This wakes a
+                # counterpart waiting for reattachment when its socket closed;
+                # logical streams retain their ACK/replay state and reconnect.
+                other=p.ends.pop('player' if side=='host' else 'host',None)
+                p.changed.set();p.touched=time.monotonic()
+                if other:
+                    try:await other.close(code=1012)
+                    except (RuntimeError,WebSocketDisconnect):pass
             try:await ws.close()
             except (RuntimeError,WebSocketDisconnect):pass

@@ -69,4 +69,4 @@ python -m pip download --only-binary=:all: --platform manylinux_2_28_x86_64 --pl
 
 ## 当前验证边界
 
-服务端MySQL迁移和HTTPS已部署验证；游戏Bridge、Hop编排和AUTO具有实现与自动化验证，但真实双机Minecraft验收尚未完成。使用流程及限制见PLAY.md，不将构建成功视为真实游戏验收通过。
+服务端MySQL迁移、HTTPS、真实ECS中继及同机双进程Minecraft联机已通过；真实A→B→A接管与独立物品栏/经验也已验证。不同电脑、不同NAT及更多Mods组合尚未覆盖。范围见PLAY.md。

@@ -71,13 +71,14 @@ class Window(ctk.CTk):
         self.cloud_role=''
         data=self.settings.data
         self.bindings=data.get('room_bindings',{})
+        self.auto_run=data.get('auto_run_path','')
         base=Path(sys.executable).parent if getattr(sys,"frozen",False) else Path(__file__).resolve().parent.parent
         bundled=base/"runtime"/"bin"/("java.exe" if os.name=="nt" else "java")
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
              ("url","https://artherlink.superyk7hero.online:47192"),("username","")]}
-        if self.values['url'].get().rstrip('/')=='https://artherlink.superyk7hero.online':
+        if self.values['url'].get().rstrip('/').lower() in ('https://artherlink.superyk7hero.online','https://artherlink.superyk7hero.online:443'):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else str(bundled) if bundled.exists() else "")
         self.password=tk.StringVar()
@@ -91,7 +92,7 @@ class Window(ctk.CTk):
         self.label(self.sidebar,"Aetherloom",size=21,bold=True).grid(row=1,column=0,sticky="w",padx=28)
         self.label(self.sidebar,"让世界，继续。",size=12,color=MUTED).grid(row=2,column=0,sticky="w",padx=28,pady=(4,34))
         self.nav={}
-        for row,(key,title) in enumerate([("home","开始游戏"),("instance","实例配置"),("cloud","共享世界"),("logs","运行记录")],3):
+        for row,(key,title) in enumerate([("home","开始游戏"),("instance","本地游戏"),("cloud","共享世界"),("logs","运行记录")],3):
             b=ctk.CTkButton(self.sidebar,text=title,anchor="w",width=176,height=44,
                 corner_radius=8,fg_color="transparent",hover_color="#252633",
                 text_color=MUTED,font=self.font(14),command=lambda k=key:self.show(k))
@@ -102,7 +103,7 @@ class Window(ctk.CTk):
         self.label(foot,"离线游戏身份",size=12,color=ACCENT).pack(anchor="w",padx=14,pady=(12,2))
         self.identity=self.label(foot,self.values["name"].get(),size=14,bold=True)
         self.identity.pack(anchor="w",padx=14,pady=(0,12))
-        self.label(self.sidebar,"v0.1 · 开发版",size=11,color="#696C81").grid(row=9,column=0,sticky="w",padx=28,pady=(0,24))
+        self.label(self.sidebar,"v0.1.0",size=11,color="#696C81").grid(row=9,column=0,sticky="w",padx=28,pady=(0,24))
         self.body=ctk.CTkFrame(self,fg_color=BG,corner_radius=0)
         self.body.grid(row=0,column=1,sticky="nsew",padx=34,pady=28)
         self.body.grid_columnconfigure(0,weight=1)
@@ -169,7 +170,7 @@ class Window(ctk.CTk):
         self.label(left,"当前实例",12,MUTED).pack(anchor="w",padx=20,pady=(18,6))
         self.instance_title=self.label(left,"尚未绑定",19,bold=True)
         self.instance_title.pack(anchor="w",padx=20)
-        self.instance_hint=self.label(left,"到实例配置中选择 .minecraft 目录",12,MUTED)
+        self.instance_hint=self.label(left,"到本地游戏中选择 .minecraft 目录",12,MUTED)
         self.instance_hint.pack(anchor="w",padx=20,pady=(5,18))
         right=self.card(row);right.grid(row=0,column=1,sticky="nsew",padx=(8,0))
         self.label(right,"软件连接",12,MUTED).pack(anchor="w",padx=20,pady=(18,6))
@@ -185,7 +186,7 @@ class Window(ctk.CTk):
 
     def build_instance(self):
         p=self.pages["instance"]
-        self.heading(p,"实例配置","只访问你选定的目录；已有游戏文件原地使用。")
+        self.heading(p,"本地游戏环境","只访问你选定的目录；已有游戏文件原地使用。")
         scroll=ctk.CTkScrollableFrame(p,fg_color="transparent")
         scroll.pack(fill="both",expand=True)
         scroll.grid_columnconfigure(0,weight=1)
@@ -196,7 +197,7 @@ class Window(ctk.CTk):
         vr=ctk.CTkFrame(c,fg_color="transparent");vr.grid(row=4,column=0,sticky="ew",padx=22,pady=(0,22));vr.grid_columnconfigure(0,weight=1)
         self.version_menu=ctk.CTkOptionMenu(vr,variable=self.values["version"],values=["尚未选择"],height=40,
             fg_color="#282A3A",button_color="#373A50",button_hover_color="#474B66",font=self.font(13),
-            command=lambda _:self.save())
+            command=lambda _:(self.suggest_run(),self.save()))
         self.version_menu.grid(row=0,column=0,sticky="ew")
         self.button(vr,"刷新版本",self.load_versions,width=100).grid(row=0,column=1,padx=(12,0))
         c=self.card(scroll);c.grid(row=1,column=0,sticky="ew",pady=(0,16));c.grid_columnconfigure(0,weight=1)
@@ -206,7 +207,7 @@ class Window(ctk.CTk):
             f=ctk.CTkFrame(row,fg_color="transparent");f.grid(row=0,column=col,sticky="ew",padx=(0,10) if col==0 else (10,0))
             self.label(f,title,12,MUTED).pack(anchor="w",pady=(0,6));self.entry(f,key).pack(fill="x")
         self.path_row(c,2,"Java 可执行文件","java",True)
-        self.path_row(c,4,"运行目录 · 可选，用于版本隔离","run",False)
+        self.path_row(c,4,"运行目录 · 自动识别版本隔离，可手动修改","run",False)
         self.button(c,"保存配置",self.save,primary=True,width=120).grid(row=6,column=0,sticky="e",padx=22,pady=20)
 
     def path_row(self,parent,row,title,key,file):
@@ -236,7 +237,7 @@ class Window(ctk.CTk):
         self.login_button=self.button(card,"登录服务器",self.login,True,width=150)
         self.login_button.grid(row=6,column=1,sticky="e",padx=22,pady=(14,20))
         toolbar=ctk.CTkFrame(p,fg_color="transparent");toolbar.pack(fill="x",pady=(0,10))
-        self.label(toolbar,"实例列表",17,bold=True).pack(side="left")
+        self.label(toolbar,"共享房间",17,bold=True).pack(side="left")
         self.cloud_buttons=[]
         for title,callback in [("刷新",self.rooms),("发布世界",self.create_room),("账号",self.account_settings)]:
             b=self.button(toolbar,title,callback,width=95);b.pack(side="right",padx=(8,0));b.configure(state="disabled");self.cloud_buttons.append(b)
@@ -255,13 +256,13 @@ class Window(ctk.CTk):
     def show(self,name):
         self.page=name;self.pages[name].tkraise()
         for key,b in self.nav.items():b.configure(fg_color="#302B49" if key==name else "transparent",text_color=ACCENT if key==name else MUTED)
-        self.breadcrumb.configure(text="工作台  /  "+{"home":"开始游戏","instance":"实例配置","cloud":"共享世界","logs":"运行记录"}[name])
+        self.breadcrumb.configure(text="工作台  /  "+{"home":"开始游戏","instance":"本地游戏","cloud":"共享世界","logs":"运行记录"}[name])
         self.refresh_summary()
 
     def refresh_summary(self):
         version=self.values["version"].get()
         self.instance_title.configure(text=(version[:32] if version!="尚未选择" else "尚未绑定"))
-        self.instance_hint.configure(text="已选择本地游戏目录" if self.values["root"].get() else "到实例配置中选择 .minecraft 目录")
+        self.instance_hint.configure(text="已选择本地游戏目录" if self.values["root"].get() else "到本地游戏中选择 .minecraft 目录")
         self.identity.configure(text=self.values["name"].get() or "Player")
         self.game_detail.configure(text=f"{self.values['name'].get()}  ·  {self.values['memory'].get()} MiB" if version!="尚未选择" else "先选择一个完整的本地游戏实例")
 
@@ -275,7 +276,7 @@ class Window(ctk.CTk):
         self.logs.clear();self.logbox.configure(state="normal");self.logbox.delete("1.0","end");self.logbox.configure(state="disabled")
 
     def save(self):
-        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},room_bindings=self.bindings))
+        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},room_bindings=self.bindings,auto_run_path=self.auto_run))
         except OSError as e:self.note("配置保存失败："+str(e),True);return False
         self.refresh_summary();self.note("配置已保存");return True
 
@@ -294,10 +295,22 @@ class Window(ctk.CTk):
             versions=[p.name for p in sorted(folder.iterdir()) if p.is_dir() and (p/(p.name+".json")).is_file()]
             self.version_menu.configure(values=versions or ["尚未选择"])
             if self.values["version"].get() not in versions:self.values["version"].set(versions[0] if versions else "尚未选择")
+            self.suggest_run()
             self.refresh_summary()
             if not silent:self.note(f"找到 {len(versions)} 个已安装版本")
         except (OSError,ValueError) as e:
             if not silent:self.note("无法读取版本："+str(e),True)
+
+    def suggest_run(self):
+        current=self.values['run'].get().strip()
+        if current and current!=self.auto_run:return
+        root=Path(self.values['root'].get())
+        version=self.values['version'].get()
+        if not root.is_dir() or version=='尚未选择':return
+        selected=inside(root,'versions/'+version)
+        isolated=any((selected/name).is_dir() for name in ('mods','saves','config'))
+        self.auto_run=str(selected if isolated else root)
+        self.values['run'].set(self.auto_run)
 
     def task(self,fn,done,failed=None):
         self.pending+=1
@@ -323,7 +336,7 @@ class Window(ctk.CTk):
         if not self.save():return
         try:
             root,version,java,name,run,memory=[self.values[k].get().strip() for k in ("root","version","java","name","run","memory")]
-            if not root or not java or version=="尚未选择":raise ValueError("请先在实例配置中选择游戏目录、版本和 Java")
+            if not root or not java or version=="尚未选择":raise ValueError("请先在本地游戏中选择游戏目录、版本和 Java")
             memory=int(memory)
             if not 512<=memory<=65536:raise ValueError("内存范围为 512—65536 MiB")
         except ValueError as e:self.note(str(e),True);self.show("instance");return
@@ -399,6 +412,10 @@ class Window(ctk.CTk):
                 self.label(top,item.get('name') or item['id'][:12],14,bold=True).pack(side='left')
                 self.label(top,("Host "+item["host"]) if item.get("host") else "当前无 Host",12,ACCENT).pack(side='right')
                 self.label(row,(item.get('environment') or '未设置环境')+' · 所有者 '+item['owner']+' · '+({'idle':'可接管','preparing':'准备中','ready':'可加入','uploading':'上传中'}.get(item['state'],item['state'])),11,MUTED).pack(anchor='w',padx=14)
+                bound=self.bindings.get(item['id'])
+                if bound:
+                    hint=self.label(row,'本机 '+bound['version']+' · '+bound['name']+'\n存档 '+bound['world'],11,MUTED)
+                    hint.configure(wraplength=590,justify='left');hint.pack(anchor='w',padx=14,pady=(4,0))
                 buttons=ctk.CTkFrame(row,fg_color='transparent');buttons.pack(fill='x',padx=14,pady=10)
                 for title,callback in [('开始',lambda r=item:self.play_room(r)),('绑定目录',lambda r=item:self.bind_room(r)),('成员',lambda r=item:self.room_members(r))]:
                     self.button(buttons,title,callback,width=80).pack(side='left',padx=(0,8))
@@ -456,7 +473,7 @@ class Window(ctk.CTk):
     def current_binding(self):
         b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory')}
         if not b['root'] or not b['java'] or b['version']=='尚未选择':
-            self.note('先在实例配置中定位游戏目录、版本和Java',True);self.show('instance');return None
+            self.note('先在本地游戏中定位游戏目录、版本和Java',True);self.show('instance');return None
         b['run']=b['run'] or b['root']
         return b
 
@@ -524,6 +541,7 @@ class Window(ctk.CTk):
         self.task(load,done)
 
     def account_settings(self):
+        if self.shared:self.note('请先结束共享会话，再修改软件账号',True);return
         choice=ctk.CTkInputDialog(text='输入操作：改名 / 改密',title='软件账号设置').get_input()
         if choice not in ('改名','改密'):return
         dialog=ctk.CTkInputDialog(text='输入新名称' if choice=='改名' else '输入新密码（至少6位）',title=choice)
@@ -531,8 +549,14 @@ class Window(ctk.CTk):
         value=dialog.get_input()
         if not value:return
         def done(result):
-            if choice=='改名':self.cloud_user=result['username'];self.values['username'].set(result['username']);self.save()
-            else:self.token='';self.note('密码已修改，原登录已失效，请使用新密码重新登录')
+            if choice=='改名':
+                self.cloud_user=result['username'];self.values['username'].set(result['username']);self.save()
+                self.cloud_state.configure(text=self.cloud_user+' · '+self.cloud_role)
+            else:
+                self.token='';self.cloud_state.configure(text='密码已更新，请重新登录')
+                self.connection.configure(text='●  本地模式');self.home_connection.configure(text='本地模式')
+                for button in self.cloud_buttons:button.configure(state='disabled')
+                self.note('密码已修改，原登录已失效，请使用新密码重新登录')
         self.cloud_task('/api/me',done,{'username' if choice=='改名' else 'password':value},method='PATCH')
 
     def play_room(self,room):

@@ -301,6 +301,8 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         with store.connect() as c:
             c.execute('BEGIN IMMEDIATE')
             r=c.execute('SELECT * FROM rooms WHERE id=?',(room,)).fetchone()
+            if not r:raise HTTPException(404,'房间不存在')
+            if user['role']!='root' and r['owner']!=user['name'] and not c.execute('SELECT 1 FROM managers WHERE room=? AND actor=?',(room,user['name'])).fetchone():raise HTTPException(403,'实例管理权限已变化')
             if r['token'] and r['expires']>time.time():raise Conflict('请先正常保存并结束托管')
             settings=c.execute('SELECT * FROM room_settings WHERE room=?',(room,)).fetchone()
             if not settings:c.execute('INSERT INTO room_settings(room,name) VALUES (?,?)',(room,room))
@@ -323,12 +325,13 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         with store.connect() as c:
             c.execute('BEGIN IMMEDIATE')
             r=c.execute('SELECT * FROM rooms WHERE id=?',(room,)).fetchone()
+            if not r:raise HTTPException(404,'房间不存在')
+            if user['role']!='root' and r['owner']!=user['name'] and not c.execute('SELECT 1 FROM managers WHERE room=? AND actor=?',(room,user['name'])).fetchone():raise HTTPException(403,'实例管理权限已变化')
             if r['token'] and r['expires']>time.time():raise Conflict('房间正在托管，需先正常保存退出')
-            if r['state']!='idle':raise Conflict('存在未处理的异常会话，请先处理恢复')
             # Immutable versions/blobs remain available to server backup/recovery.
             for table,column in (('members','room'),('managers','room'),('room_settings','room'),('rooms','id')):
                 c.execute(f'DELETE FROM {table} WHERE {column}=?',(room,))
-            audit(c,user['name'],'delete_room',room,{'head':r['head']})
+            audit(c,user['name'],'delete_room',room,{'head':r['head'],'state':r['state'],'epoch':r['epoch']})
         return {'ok':True}
 
     @app.post('/api/rooms/{room}/join')
@@ -491,7 +494,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
     return app
 
 def add_user(store,name,password,role):
-    valid_name(name)
+    valid_name(name,minimum=1)
     if role not in ('root','admin','player'):raise ValueError('未知权限组')
     salt,digest=password_hash(password)
     with store.connect() as c:

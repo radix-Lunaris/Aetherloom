@@ -4,6 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.ConnectScreen;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.multiplayer.ServerStatusPinger;
+import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.common.MinecraftForge;
@@ -30,6 +34,11 @@ public class Bridge {
     private volatile IntegratedServer pendingServer;
     private long nextPoll = 0;
     private volatile boolean stop = false;
+    private ServerStatusPinger pinger;
+    private ServerData targetServer;
+    private long joinDeadline;
+    private boolean connecting = false;
+    private boolean joined = false;
 
     public Bridge() {
         String file = System.getenv("AETHERLOOM_BRIDGE_FILE");
@@ -55,8 +64,8 @@ public class Bridge {
         JsonObject data = new JsonObject();
         data.addProperty("event", type);
         data.addProperty("port", port);
-        data.addProperty("world", server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().toString());
-        data.addProperty("uuid", server.getSingleplayerProfile().getId().toString());
+        data.addProperty("world", server == null ? config.get("world").getAsString() : server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().toString());
+        data.addProperty("uuid", server == null ? (Minecraft.getInstance().player == null ? config.get("identity").getAsString() : Minecraft.getInstance().player.getUUID().toString()) : server.getSingleplayerProfile().getId().toString());
         HttpResponse<String> response = http.send(request().POST(HttpRequest.BodyPublishers.ofString(gson.toJson(data))).build(), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) throw new IllegalStateException("Bridge event rejected");
     }
@@ -86,7 +95,7 @@ public class Bridge {
         } catch (Exception e) {
             System.err.println("Aetherloom could not prepare LAN: " + e);
             try { event("error", 0, server); } catch (Exception ignored) {}
-            Minecraft.getInstance().clearLevel(new TitleScreen());
+            leave();
         }
     }
 
@@ -98,9 +107,51 @@ public class Bridge {
         catch (Exception e) { System.err.println("Aetherloom: saved event was not acknowledged; retain local recovery data."); }
     }
 
+    private void leave() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level != null) mc.level.disconnect();
+        if (mc.getSingleplayerServer() != null) mc.getSingleplayerServer().halt(false);
+        mc.clearLevel(new TitleScreen());
+    }
+
+    private void join(Minecraft mc) {
+        if (joined) {
+            if (mc.player == null) loaded = false;
+            return;
+        }
+        if (mc.player != null && mc.level != null && mc.getSingleplayerServer() == null) {
+            try { event("joined",0,null); joined=true; loaded=true; }
+            catch(Exception e) { System.err.println("Aetherloom: joined event rejected"); leave(); }
+            return;
+        }
+        if (connecting) return;
+        if (pinger == null && mc.screen instanceof TitleScreen) {
+            targetServer = new ServerData("Aetherloom",config.get("join").getAsString(),false);
+            targetServer.ping = -1;
+            pinger = new ServerStatusPinger();
+            joinDeadline = System.currentTimeMillis()+30000;
+            try { pinger.pingServer(targetServer,()->{}); }
+            catch(Exception e) { System.err.println("Aetherloom: server discovery failed"); }
+        }
+        if (pinger != null) {
+            pinger.tick();
+            // Forge uses ping metadata to select its login handshake. Vanilla
+            // Quick Play can connect without that metadata and then time out.
+            if (targetServer.ping >= 0 && targetServer.forgeData != null) {
+                pinger.removeAll();pinger=null;connecting=true;
+                ConnectScreen.startConnecting(new TitleScreen(),mc,ServerAddress.parseString(targetServer.ip),targetServer,false);
+            } else if (System.currentTimeMillis()>joinDeadline) {
+                pinger.removeAll();pinger=null;connecting=true;
+                System.err.println("Aetherloom: Forge server discovery timed out");
+                try { event("error",0,null); } catch(Exception ignored) {}
+            }
+        }
+    }
+
     private void tick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
+        if (config.has("join")) join(mc);
         IntegratedServer pending = pendingServer;
         // publishServer reads Minecraft.player, which is still null during
         // ServerStartedEvent. Wait for the local client to finish joining.
@@ -112,7 +163,7 @@ public class Bridge {
         if (stop) {
             stop = false;
             System.out.println("Aetherloom: stopping managed world");
-            Minecraft.getInstance().clearLevel(new TitleScreen());
+            leave();
             return;
         }
         long now = System.currentTimeMillis();

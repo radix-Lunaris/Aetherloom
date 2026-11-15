@@ -103,3 +103,22 @@ materialize尚未处理云端删除文件、精确镜像、空目录与完整恢
 - 实测修正Bridge：需pack.mcmeta避免Forge警告页阻止自动启动；不能在ServerStartedEvent直接publishServer，因为LocalPlayer尚为空，现等玩家进入世界后开放LAN；路径匹配使用Files.isSameFile兼容8.3短路径。
 - 正常退出的保存回执仍在实测诊断，未标记完整Hop通过。双机不同NAT、Host→Player→Host物品栏连续性尚未验收，main保持不合入。
 - 已构建过Windows包，但最终交付需以Bridge最新验证结果重新构建，不能把之前dist当最终验收包。
+
+
+### 2026-11-16 真实游戏关键检查点
+- 实际1.20.1/Forge47.4.22的自动LAN、763状态查询、正常保存事件、Java文件锁释放、玩家数据归档及退出均通过。
+- 真实ECS上的单机双身份顺序 A→B→A 接管通过，三次分别正常提交版本。A=3钻石/17级，B=2绿宝石/23级；A再接管仍为自己的3钻石/17级，且B阶段A玩家文件SHA-256不变。原用户存档未加载，测试房间已移除。
+- Player自动加入仍在排查：直接LAN对照也超时，故不能归因于中继。现将Guest加入交给Bridge先执行Forge服务发现，待forgeData齐备后再ConnectScreen，避免仅依赖原版Quick Play；结果待实测。
+- 退出保护已修正：仅clearLevel会等待未停的集成服务器，需先断开并halt(false)再clearLevel。修复后正常保存测试通过。
+- 当前最新dev检查点4bbadad，后续修复尚需第二次提交/推送、重建客户端和同步服务端对应源码。main继续保留验收门槛。
+
+
+### v0.1.0 发行候选：本轮已验证范围
+- 本轮用户明确要求：将已验证版本推送dev、合并main并发行Release；当前交付范围按RELEASE_NOTES.md记录，不把未完成的跨电脑/NAT验证标记通过。
+- 27项本地自动化测试通过；网络清理专项增加无ASGI错误断言与单侧提前关闭场景，并通过回归。
+- 最终真实游戏：1.20.1/Forge47.4.22独立启动、自动LAN、正常保存/锁释放、ECS三次A→B→A接管通过。A=3钻石17级，B=2绿宝石23级，A再接管仍正确。
+- 两个真实Minecraft进程经ECS中继自动加入通过，同时收到Player的Bridge入服确认；Player退出不上传，Host保存退出提交最终云版本。测试账号与房间已清理。
+- Guest改用Bridge执行Forge服务发现，取得forgeData后连接；原版Quick Play的直接连接与LAN对照都曾出现握手超时，该实测修复已验证。
+- 发行包含Windows完整包（Java17及两个Java辅助模块）、Docker服务端、校验和；包内BUILD_INFO.json追踪来源提交。测试Fixture模组不进入客户端包。
+- 固定接口：HTTPS47192业务、HTTPS38443+原安全路径面板、52861/UDP端点发现，MySQL不发布主机端口。
+- 发布操作进行中；最终合并、CI、Release及线上镜像回执以GitHub和本地.local记录为准。

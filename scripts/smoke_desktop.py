@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory() as d:
         window.values['username'].set('test')
         window.password.set('never-save-this')
         with patch.object(Window,'request',side_effect=lambda url,token,path,body=None:
-            {'token':'temporary-token','username':'test','role':'player'} if path=='/api/login' else []):
+            {'token':'temporary-token','username':'test','role':'player'} if path=='/api/login' else []),patch('aetherloom.cloud.API.__call__',return_value=[]):
             window.login()
             wait(window,lambda:window.token=='temporary-token' and window.pending==0)
         data=json.loads(window.settings.path.read_text(encoding='utf-8'))

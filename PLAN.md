@@ -29,3 +29,7 @@ A Host/B Player -> A保存上传 -> B Host/A Player，角色/物品/经验/模�
 https://github.com/radix-Lunaris/Aetherloom
 保留历史，dev开发，main总交付，不强推。每阶段更新检查点。
 
+
+
+## 本轮发行调整（2026-11-16）
+用户要求将当前已验证的v0.1.0里程碑合入main并发布Release。已通过同机双身份接管及双进程真实ECS联机；两台不同Windows、不同NAT、复杂整合包及更广玩家数据组合仍保留为后续验收项，不据本次发行标记完成。
