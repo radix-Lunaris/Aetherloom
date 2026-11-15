@@ -9,4 +9,5 @@ dist/
 *.db-shm
 runtime/
 *.spec
+wheelhouse/
 

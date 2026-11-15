@@ -1,4 +1,26 @@
-# 实施检查点：2026-11-15
+# 实施检查点
+
+## ECS正式部署：2026-11-16
+- 用户明确授权部署后，已安装Docker/Compose、宿主Nginx、Certbot；部署目录/opt/aetherloom。
+- HTTPS API443、面板38443+随机16位路径；后端仅127.0.0.1:8765。SSH18081保留。
+- Let's Encrypt HTTP-01证书签发成功，至2027-02-13；certbot.timer和续期后Nginx重载钩子启用。
+- 新增管理面板：管理员登录、内存/负载/磁盘/账号/实例统计、实例会话列表、账号列表及开户。
+- Swagger默认关闭；API未登录401、普通用户管理403；登录限流；高位端口错误路径404，公开443不提供面板或开户入口。
+- 9项本地测试通过。真实外网TLS验证通过：API健康200、面板正确路径200、错误路径404、未登录401、root登录和管理查询200。
+- Docker Hub直连失败，使用Docker官方摘要锁定的Python3.11分发镜像；Python依赖锁版本，以Linux离线轮子构建成功。
+- 访问资料仅在.local/deployment-access.json与.local/SERVER-HANDOFF.md，未提交。SSH口令不复制入仓库或镜像。
+- 自动Hop、Bridge、AUTO、实例成员管理及完整恢复审批面板仍未交付，不把当前上线控制服务宣称为完整联机服务。
+
+## 工作区迁移：2026-11-16
+- 正式工作区：D:/Data_others/Aliyun-Server/上海华东2-书记宝宝-实例-Activity/codex。
+- 项目目录：上述工作区下 Aetherloom/；保留 .git、.venv、runtime、dist、build、.local。
+- 整体迁移前后10317个文件SHA256全部一致，总计1377571627字节。
+- 迁移后修复虚拟环境激活路径和36个命令入口，检查软件已保存路径。
+- 新路径8项测试全部通过；pip与PyInstaller入口可用。
+- ECS仅只读检查，未安装/部署。域名artherlink.superyk7hero.online；计划目录/opt/aetherloom、API443、面板38443和16位随机路径，尚待实现及明确部署指令。
+- 未提交的ECS只读检查资料、主机密钥记录完整保留在.local，不写入Git。
+- 旧工作区CraftLink/MCsaves-sync继续作为参考；共同代码学习记录已复制到新工作区根目录。
+
 
 ## GUI/Docker交付更新
 - 取消正版授权需求；游戏仅离线身份，软件账号保持独立。

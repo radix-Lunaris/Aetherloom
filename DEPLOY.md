@@ -43,6 +43,25 @@ init-root交互输入12位以上密码，不在命令行或Compose中保存密�
 备份须先停止服务，再备份整个数据卷（含SQLite及blobs），恢复到空卷后启动。
 容器使用非root用户、512MiB限制、单worker；按实际空间管理数据。
 
+## HTTPS 与管理面板
+
+控制服务采用Docker，Nginx反代采用宿主机服务。客户端API使用443；管理面板使用38443及每次部署单独生成的16位字母数字路径，且仍需root/admin登录。
+Compose中设置 AETHERLOOM_PANEL=1 才会提供面板静态页面。后端8765保持本机绑定；Nginx公开443仅转发API及health，不转发面板静态资源，/api/users仅在面板入口提供。
+FastAPI的/docs和/openapi.json默认关闭。面板支持资源概况、实例与会话只读列表、账号列表与开户；不代表自动Hop已经实现。
+证书使用Let's Encrypt HTTP-01，域名解析到服务器后无需TXT记录；80端口保留验证路径用于续期。Certbot续期后执行nginx -t并重载。
+真实入口、root初始密码与本次验证结果保存在部署工作区.local，禁止提交。
+
+## 网络受限环境的离线依赖构建
+
+server/requirements.txt锁定已验证依赖版本。可在联网机器准备Linux amd64/Python3.11轮子：
+```bash
+python -m pip download --only-binary=:all: --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 --python-version 311 --implementation cp --abi cp311 -r server/requirements.txt -d wheelhouse
+docker compose -f compose.yaml -f compose.offline.yaml build
+docker compose -f compose.yaml -f compose.offline.yaml up -d
+```
+把wheelhouse/与源码一同上传。可在.env设置 COMPOSE_FILE=compose.yaml:compose.offline.yaml，后续直接使用docker compose。
+基础镜像可由 AETHERLOOM_PYTHON_IMAGE 指定分发源，但应锁定并核对Docker官方Registry摘要；不要将不明镜像直接当作官方镜像。
+
 ## 创建普通软件账号
 最简单的方式（需服务器Docker管理权限）：
 ```bash
@@ -50,11 +69,7 @@ docker compose exec control python -m aetherloom.server create-user --username f
 ```
 按提示输入12位以上密码；创建服务器管理员可附加 --role admin。
 
-也可通过API：
-运行服务后，在服务器本机浏览 http://127.0.0.1:8765/docs（远程可通过上述SSH转发）。
-POST /api/login 以root登录，得到token。
-页面Authorize输入token（若该版本文档未显示Authorize，可用curl附Authorization: Bearer TOKEN）。
-POST /api/users，JSON为 {"username":"friend","password":"至少12位密码","role":"player"}。
+也可通过高位端口的安全路径进入管理面板，由root/admin开户；只有root可创建服务器admin。
 GUI在云服务页填写同一服务器地址、软件账号与密码登录。
 
 ## 当前验证边界

@@ -10,6 +10,7 @@ import secrets
 import shutil
 import sqlite3
 import time
+import threading
 from fastapi import FastAPI, HTTPException, Header, Request, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -40,8 +41,31 @@ def create_app(data_dir=None):
 CREATE TABLE IF NOT EXISTS accounts(name TEXT PRIMARY KEY, salt TEXT, digest TEXT, role TEXT);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires REAL);
 """)
-    app = FastAPI(title="Aetherloom", version="0.1.0")
+    app = FastAPI(title="Aetherloom", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
+    attempts = {}
+    attempts_lock = threading.Lock()
+
+    @app.middleware('http')
+    async def security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        return response
+
+    if os.environ.get('AETHERLOOM_PANEL') == '1':
+        static = Path(__file__).with_name('panel')
+        @app.get('/')
+        def panel():
+            return FileResponse(static/'index.html')
+        @app.get('/panel.js')
+        def panel_js():
+            return FileResponse(static/'panel.js', media_type='application/javascript')
+        @app.get('/panel.css')
+        def panel_css():
+            return FileResponse(static/'panel.css', media_type='text/css')
 
     def authenticate(authorization: str = Header(default="")):
         token = authorization.removeprefix("Bearer ")
@@ -82,7 +106,18 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         return {"status":"ok","version":"0.1.0"}
 
     @app.post("/api/login")
-    def login(body:Login):
+    def login(body:Login, request:Request):
+        key=(request.client.host if request.client else 'unknown',body.username)
+        now=time.monotonic()
+        with attempts_lock:
+            stale=[k for k,v in attempts.items() if now-v[0]>60]
+            for k in stale:del attempts[k]
+            if key in attempts and attempts[key][1]>=10:
+                raise HTTPException(429,'登录尝试过多，请一分钟后重试')
+            if len(attempts)>10000:
+                raise HTTPException(429,'登录繁忙，请稍后重试')
+            first,count=attempts.get(key,(now,0))
+            attempts[key]=(first,count+1)
         with store.connect() as c:
             row=c.execute("SELECT * FROM accounts WHERE name=?",(body.username,)).fetchone()
         # Compute a hash even for missing usernames.
@@ -90,6 +125,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
             bytes.fromhex(row["salt"]) if row else b"0"*16,200000).hex()
         if not row or not hmac.compare_digest(digest,row["digest"]):
             raise HTTPException(401,"账号或密码错误")
+        with attempts_lock:attempts.pop(key,None)
         token=secrets.token_urlsafe(32)
         with store.connect() as c:
             c.execute("INSERT INTO sessions VALUES (?,?,?)",
@@ -111,7 +147,22 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         with store.connect() as c:
             rooms=c.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
             accounts=c.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
-        return {"disk_total":disk.total,"disk_free":disk.free,"rooms":rooms,"accounts":accounts}
+        result={"disk_total":disk.total,"disk_free":disk.free,"rooms":rooms,"accounts":accounts,
+                "cpu_count":os.cpu_count(),"server_time":time.time(),"version":"0.1.0"}
+        if hasattr(os,'getloadavg'):result['load_average']=os.getloadavg()
+        meminfo=Path('/proc/meminfo')
+        if meminfo.exists():
+            memory={line.split(':')[0]:int(line.split()[1])*1024 for line in meminfo.read_text().splitlines() if len(line.split())>=2 and line.split()[1].isdigit()}
+            result['memory_total']=memory.get('MemTotal')
+            result['memory_available']=memory.get('MemAvailable')
+        return result
+
+    @app.get('/api/users')
+    def list_users(user=Depends(authenticate)):
+        if user['role'] not in ('root','admin'):
+            raise HTTPException(403,'需要服务器管理权限')
+        with store.connect() as c:
+            return [dict(r) for r in c.execute('SELECT name,role FROM accounts ORDER BY name').fetchall()]
 
     @app.post("/api/users")
     def users(body:UserInput,user=Depends(authenticate)):

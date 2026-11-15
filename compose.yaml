@@ -3,7 +3,11 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
+      args:
+        PYTHON_IMAGE: "${AETHERLOOM_PYTHON_IMAGE:-python:3.11-slim}"
     restart: unless-stopped
+    environment:
+      AETHERLOOM_PANEL: "${AETHERLOOM_PANEL:-0}"
     ports:
       - "${AETHERLOOM_BIND:-127.0.0.1}:8765:8765"
     volumes:

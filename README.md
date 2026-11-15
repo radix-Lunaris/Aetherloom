@@ -8,6 +8,6 @@ Python 3.11+：`python -m unittest discover -s tests -v`。
 
 双击发行包内Aetherloom.exe；配套Java17，无需安装HMCL/PCL。用户提供完整.minecraft目录，仅支持离线游戏身份。
 
-服务端上传dist/Aetherloom-Server.zip；Docker构建和初始化步骤详见DEPLOY.md。自动Hop、Bridge、AUTO仍待接通，不可用当前包管理正式共同世界。
+服务端上传dist/Aetherloom-Server.zip；Docker、HTTPS、随机路径高位端口管理面板及离线依赖构建详见DEPLOY.md。面板提供监测、实例列表和开户。自动Hop、Bridge、AUTO仍待接通，不可用当前包管理正式共同世界。
 
 详见 PLAN.md、CHECKPOINT.md。
