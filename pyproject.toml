@@ -7,7 +7,7 @@ version = "0.1.0.dev0"
 description = "Minecraft host hopping with authoritative self-hosted cloud saves"
 requires-python = ">=3.11"
 [project.optional-dependencies]
-desktop = ["PySide6>=6.7"]
+desktop = ["customtkinter==5.2.2", "pillow==13.0.0"]
 server = ["fastapi", "uvicorn"]
 [project.scripts]
 aetherloom = "aetherloom.__main__:main"

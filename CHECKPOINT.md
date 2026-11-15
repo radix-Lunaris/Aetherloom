@@ -1,5 +1,14 @@
 # 实施检查点
 
+## 界面重构：2026-11-16
+- 用户要求客户端改为CustomTkinter；已移除桌面PySide6依赖，重写固定侧栏、本地启动首页、实例配置、云端连接与运行记录。
+- 配置改为本机JSON，支持只读迁移旧Qt注册表设置；密码和令牌仅在内存；后台任务通过队列回到主线程更新界面。
+- 网页面板采用同一深灰/紫色视觉，拆分登录、概况、实例与账号管理，适配手机；保留现有API与权限。
+- 9项核心/API测试通过；浏览器登录、导航、临时预览开户刷新、手机宽度检查通过，无JavaScript错误。
+- CustomTkinter源码与最终EXE启动检查通过；旧Qt安装包留在.local/backups；服务器保留旧镜像与面板归档。
+- 新面板已Docker更新上线；真实HTTPS浏览器验证登录、指标、账号列表、退出；公开路径与未授权访问检查通过。证书、安全路径、账号与数据卷沿用。
+- 新客户端为dist/Aetherloom/Aetherloom.exe及dist/Aetherloom-Windows.zip。自动Hop/Bridge/AUTO仍待完成。
+
 ## ECS正式部署：2026-11-16
 - 用户明确授权部署后，已安装Docker/Compose、宿主Nginx、Certbot；部署目录/opt/aetherloom。
 - HTTPS API443、面板38443+随机16位路径；后端仅127.0.0.1:8765。SSH18081保留。

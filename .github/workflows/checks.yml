@@ -17,6 +17,10 @@ jobs:
           java-version: '17'
       - run: pip install -r server/requirements.txt httpx
       - run: python -m unittest discover -s tests -v
+      - if: runner.os == 'Windows'
+        run: pip install customtkinter==5.2.2 pillow==13.0.0
+      - if: runner.os == 'Windows'
+        run: python scripts/smoke_desktop.py
   docker:
     runs-on: ubuntu-latest
     steps:

@@ -1,1 +1,77 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aetherloom 管理面板</title><link rel="stylesheet" href="panel.css"><script src="panel.js" defer></script></head><body><main><header><div class="brand">Aetherloom</div><p>共享世界 · 控制中心</p></header><section id="login-section"><h1>管理员登录</h1><p>使用服务器 root 或 admin 账号。游戏离线身份与此账号独立。</p><form id="login"><label>软件账号<input id="username" autocomplete="username" required maxlength="32"></label><label>密码<input id="password" type="password" autocomplete="current-password" required maxlength="1024"></label><button>登录控制中心</button></form></section><div id="workspace" hidden><div class="bar"><h1>服务器概况</h1><button id="refresh">刷新</button><button id="logout">退出登录</button></div><div id="metrics" class="metrics"></div><section><h2>实例与会话</h2><p class="notice">当前为控制服务开发版。自动 Hop、游戏 Bridge 与 AUTO 隧道尚未接通。</p><div class="table-wrap"><table><thead><tr><th>实例 ID</th><th>所有者</th><th>Host</th><th>状态</th><th>代次</th></tr></thead><tbody id="rooms"></tbody></table></div></section><section><h2>账号管理</h2><form id="create-user" class="account-form"><label>账号<input id="new-name" required pattern="[A-Za-z0-9_-]{1,32}" maxlength="32" autocomplete="off"></label><label>初始密码<input id="new-password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label><label>服务器角色<select id="new-role"><option value="player">player · 普通账号</option><option id="admin-option" value="admin">admin · 服务器管理员</option></select></label><button>创建账号</button></form><table><thead><tr><th>账号</th><th>服务器角色</th></tr></thead><tbody id="users"></tbody></table><p>服务器角色、实例管理角色、当前 Host 为独立权限层。此页面暂提供开户和只读监测。</p></section></div><p id="message" role="status"></p><footer>HTTPS 访问 · 登录凭据仅保留在当前页面内存 · 刷新页面需重新登录</footer></main></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aetherloom · 控制中心</title>
+<link rel="stylesheet" href="panel.css"><script src="panel.js" defer></script>
+</head>
+<body>
+<div id="login-section" class="login-shell">
+  <section class="login-story">
+    <a class="brand" href="./"><span class="brand-mark">A</span>Aetherloom</a>
+    <div class="story-body">
+      <p class="eyebrow">YOUR WORLD, TOGETHER.</p>
+      <h1>共同世界。<br>从这里开始。</h1>
+      <p class="story-description">在自己的服务器上管理账号、查看实例，<br class="desktop-only">为每一段共同的旅程做好准备。</p>
+      <div class="world-art" aria-hidden="true"><div class="tile tile-one"></div><div class="tile tile-two"></div><div class="tile tile-three"></div><div class="tile tile-four"></div><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span></div>
+    </div>
+    <p class="story-foot">SELF-HOSTED. ALWAYS YOURS.</p>
+  </section>
+  <section class="login-form-area">
+    <div class="login-card">
+      <span class="small-badge"><span class="dot"></span> 自托管控制中心</span>
+      <h2>欢迎回来</h2><p class="muted login-subtitle">使用你的服务器管理员账号登录。</p>
+      <form id="login">
+        <label for="username">软件账号</label>
+        <input id="username" autocomplete="username" placeholder="输入 root 或 admin 账号" required maxlength="32">
+        <label for="password">登录密码</label>
+        <div class="password-field"><input id="password" type="password" autocomplete="current-password" placeholder="输入管理员密码" required maxlength="1024"><button type="button" id="toggle-password" aria-label="显示密码">显示</button></div>
+        <button class="primary login-submit" type="submit">登录控制中心 <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="login-help">这是 Aetherloom 软件账号，与你的 Minecraft 离线身份无关。</p>
+    </div>
+    <footer>Aetherloom <span>开发版 0.1</span></footer>
+  </section>
+</div>
+
+<div id="workspace" class="app-shell" hidden>
+  <aside class="sidebar">
+    <a class="brand" href="./"><span class="brand-mark">A</span>Aetherloom</a>
+    <p class="nav-caption">控制中心</p>
+    <nav aria-label="主导航">
+      <button type="button" class="nav-item active" data-view="overview"><span aria-hidden="true">◈</span>服务器概况</button>
+      <button type="button" class="nav-item" data-view="instances"><span aria-hidden="true">▦</span>实例与会话</button>
+      <button type="button" class="nav-item" data-view="accounts"><span aria-hidden="true">◎</span>账号管理</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="profile"><div class="avatar">A</div><div><strong id="actor">管理员</strong><span id="actor-role">服务器账号</span></div></div><button type="button" id="logout" class="logout">退出登录 <span>↗</span></button></div>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar"><div class="breadcrumb">控制中心 <span>/</span> <strong id="breadcrumb">服务器概况</strong></div><span class="connection"><span class="dot"></span> 已连接</span></header>
+    <section id="view-overview" class="view">
+      <div class="page-heading"><div><p class="eyebrow">OVERVIEW</p><h1>服务器概况</h1><p class="muted">资源、实例与账号，一目了然。</p></div><button type="button" id="refresh" class="secondary">↻ <span>刷新数据</span></button></div>
+      <div id="metrics" class="metric-grid"></div>
+      <div class="overview-grid">
+        <section class="surface resource-card"><div class="section-heading"><h2>资源状态</h2><span class="tiny-label">实时快照</span></div><div class="resource-line"><span>磁盘使用</span><strong id="disk-label">—</strong></div><progress id="disk-progress" max="100" value="0"></progress><div class="resource-line"><span>物理内存使用</span><strong id="memory-label">—</strong></div><progress id="memory-progress" max="100" value="0"></progress><div class="resource-bottom"><span>CPU 核心 <strong id="cpu-count">—</strong></span><span>系统负载 <strong id="load-average">—</strong></span></div><p class="resource-note">内存为宿主机指标；负载为最近 1 分钟平均值。</p></section>
+        <section class="surface service-card"><div class="section-heading"><h2>服务信息</h2><span class="status-tag">运行中</span></div><dl><div><dt>控制服务</dt><dd>Aetherloom API</dd></div><div><dt>版本</dt><dd id="service-version">—</dd></div><div><dt>连接方式</dt><dd>HTTPS</dd></div><div><dt>最后刷新</dt><dd id="updated">—</dd></div></dl></section>
+      </div>
+      <div class="release-note"><span class="release-icon">i</span><div><strong>当前为控制服务开发版</strong><p>已开放资源查看与账号管理。自动 Hop、游戏 Bridge 与 AUTO 联机尚未开放。</p></div></div>
+    </section>
+
+    <section id="view-instances" class="view" hidden>
+      <div class="page-heading"><div><p class="eyebrow">INSTANCES</p><h1>实例与会话</h1><p class="muted">查看共享实例，以及它当前由谁托管。</p></div><span class="count-badge" id="room-count">0 个实例</span></div>
+      <section class="surface table-surface"><div class="section-heading"><h2>全部实例</h2><span class="tiny-label">只读视图</span></div><div class="table-wrap"><table><thead><tr><th>实例 ID</th><th>所有者</th><th>当前 Host</th><th>状态</th><th>代次</th></tr></thead><tbody id="rooms"></tbody></table></div></section>
+    </section>
+
+    <section id="view-accounts" class="view" hidden>
+      <div class="page-heading"><div><p class="eyebrow">ACCOUNTS</p><h1>账号管理</h1><p class="muted">为朋友创建独立的软件账号。</p></div><span class="count-badge" id="account-count">0 个账号</span></div>
+      <div class="accounts-grid">
+        <section class="surface table-surface"><div class="section-heading"><h2>服务器账号</h2><span class="tiny-label">软件登录身份</span></div><div class="table-wrap"><table><thead><tr><th>账号</th><th>服务器角色</th></tr></thead><tbody id="users"></tbody></table></div></section>
+        <section class="surface create-card"><h2>创建账号</h2><p class="muted">密码通过安全渠道交给使用者。</p><form id="create-user"><label for="new-name">账号名称</label><input id="new-name" placeholder="字母、数字、下划线或连字符" required pattern="[A-Za-z0-9_-]{1,32}" maxlength="32" autocomplete="off"><label for="new-password">初始密码</label><input id="new-password" type="password" placeholder="至少 12 位" required minlength="12" maxlength="1024" autocomplete="new-password"><label for="new-role">服务器角色</label><select id="new-role"><option value="player">Player · 普通账号</option><option id="admin-option" value="admin">Admin · 服务器管理员</option></select><button class="primary" type="submit">创建账号 <span>+</span></button></form><p class="permission-note">实例所有者、实例管理员和 Host 为独立身份，不由服务器角色直接替代。</p></section>
+      </div>
+    </section>
+    <footer class="workspace-footer">Aetherloom <span>你的世界，由你掌握。</span></footer>
+  </main>
+</div>
+<div id="message" class="toast" role="status" aria-live="polite" hidden></div>
+</body></html>
