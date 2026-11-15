@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/radix-angelicae/shared-playerdata",
+  "commit": "2d0cf068ff252d7542d44536a677a2fdb247cff7",
+  "unmodified_files": {
+    "Tag.java": "9f50dfab3d8096ee6c716b4fceb0ab263d90e29d42a1dde3826508217f193f63",
+    "NbtIo.java": "1be4dcd52ed19d3af2cb918b8d0cff6cfc2ee54618f7d852d53d745fa4be0d5f",
+    "Uuids.java": "6c7c68451dc013a2da1822229306af02c2fc2b713a402b601dc500d6d92628ab"
+  },
+  "integration": "Selected-world strict repair entrypoint; no upstream directory scanner or polling runtime is included.",
+  "hash_format": "SHA-256 of UTF-8 text with LF line endings"
+}

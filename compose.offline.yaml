@@ -1,0 +1,4 @@
+services:
+  control:
+    build:
+      dockerfile: server/Dockerfile.offline

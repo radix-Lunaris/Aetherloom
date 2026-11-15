@@ -1,0 +1,12 @@
+.git
+.venv
+dist
+build
+.local
+__pycache__
+*.zip
+runtime
+.env
+bridge/.gradle
+assets
+
