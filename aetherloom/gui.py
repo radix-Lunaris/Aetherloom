@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox
 import urllib.error
 import urllib.request
 import customtkinter as ctk
+import asyncio
 from .launcher import launch, inside
 
 BG="#101116"
@@ -65,13 +66,19 @@ class Window(ctk.CTk):
         self.logs=[]
         self.launching=False
         self.login_busy=False
+        self.shared=None
+        self.cloud_user=''
+        self.cloud_role=''
         data=self.settings.data
+        self.bindings=data.get('room_bindings',{})
         base=Path(sys.executable).parent if getattr(sys,"frozen",False) else Path(__file__).resolve().parent.parent
         bundled=base/"runtime"/"bin"/("java.exe" if os.name=="nt" else "java")
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
-             ("url","https://artherlink.superyk7hero.online"),("username","")]}
+             ("url","https://artherlink.superyk7hero.online:47192"),("username","")]}
+        if self.values['url'].get().rstrip('/')=='https://artherlink.superyk7hero.online':
+            self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else str(bundled) if bundled.exists() else "")
         self.password=tk.StringVar()
         self.grid_rowconfigure(0,weight=1)
@@ -231,12 +238,12 @@ class Window(ctk.CTk):
         toolbar=ctk.CTkFrame(p,fg_color="transparent");toolbar.pack(fill="x",pady=(0,10))
         self.label(toolbar,"实例列表",17,bold=True).pack(side="left")
         self.cloud_buttons=[]
-        for title,callback in [("刷新",self.rooms),("创建记录",self.create_room),("服务器概况",self.server_status)]:
+        for title,callback in [("刷新",self.rooms),("发布世界",self.create_room),("账号",self.account_settings)]:
             b=self.button(toolbar,title,callback,width=95);b.pack(side="right",padx=(8,0));b.configure(state="disabled");self.cloud_buttons.append(b)
         self.room_list=ctk.CTkScrollableFrame(p,fg_color=CARD,corner_radius=12,border_width=1,border_color=BORDER)
         self.room_list.pack(fill="both",expand=True)
         self.label(self.room_list,"登录后，这里会显示服务器中的实例。",13,MUTED).pack(padx=20,pady=28)
-        self.label(p,"共享开服尚未开放 · 当前版本提供本地启动与云端查询。",11,MUTED).pack(anchor="w",pady=(12,0))
+        self.label(p,"共享房间 = 游戏环境 + 共同存档；本地实例 = 已准备的游戏目录。",11,MUTED).pack(anchor="w",pady=(12,0))
 
     def build_logs(self):
         p=self.pages["logs"];self.heading(p,"运行记录","查看启动与服务器连接的处理结果。")
@@ -268,7 +275,7 @@ class Window(ctk.CTk):
         self.logs.clear();self.logbox.configure(state="normal");self.logbox.delete("1.0","end");self.logbox.configure(state="disabled")
 
     def save(self):
-        try:self.settings.save({k:v.get().strip() for k,v in self.values.items()})
+        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},room_bindings=self.bindings))
         except OSError as e:self.note("配置保存失败："+str(e),True);return False
         self.refresh_summary();self.note("配置已保存");return True
 
@@ -303,7 +310,7 @@ class Window(ctk.CTk):
         while True:
             try:callback,result,_=self.events.get_nowait()
             except queue.Empty:break
-            self.pending-=1
+            if _!='notification':self.pending-=1
             try:callback(result)
             except Exception as e:self.fail(str(e))
         self.after(100,self.drain)
@@ -352,6 +359,7 @@ class Window(ctk.CTk):
             raise ValueError(str(detail)) from None
 
     def login(self):
+        if self.shared:self.note('共享会话运行期间不能切换软件账号',True);return
         if self.login_busy:return
         url=self.values["url"].get().strip().rstrip("/")
         username=self.values["username"].get().strip()
@@ -363,6 +371,7 @@ class Window(ctk.CTk):
         def done(result):
             self.login_busy=False;self.login_button.configure(state="normal",text="重新登录")
             self.token=result["token"];self.server_url=url;self.password.set("")
+            self.cloud_user=result['username'];self.cloud_role=result['role']
             self.cloud_state.configure(text=username+" · "+result["role"],text_color=ACCENT)
             self.connection.configure(text="●  已连接服务器")
             self.home_connection.configure(text="已连接")
@@ -374,26 +383,189 @@ class Window(ctk.CTk):
             self.connection.configure(text="●  本地模式");self.home_connection.configure(text="本地模式");self.note(message,True)
         self.task(lambda:self.request(url,"","/api/login",{"username":username,"password":password}),done,failed)
 
-    def cloud_task(self,path,done,body=None):
+    def cloud_task(self,path,done,body=None,method=None):
         if not self.token:self.note("请先登录服务器",True);return
         url,token=self.server_url,self.token
-        self.task(lambda:self.request(url,token,path,body),done)
+        from .cloud import API
+        self.task(lambda:API(url,token)(path,body,method=method),done)
 
     def rooms(self):
         def done(items):
             for child in self.room_list.winfo_children():child.destroy()
-            if not items:self.label(self.room_list,"暂无实例 · 你可以创建一个云端记录。",13,MUTED).pack(pady=30);return
+            if not items:self.label(self.room_list,"暂无共享房间 · 先配置游戏，再发布一个本地世界。",13,MUTED).pack(pady=30);return
             for item in items:
                 row=ctk.CTkFrame(self.room_list,fg_color="#232532",corner_radius=8);row.pack(fill="x",padx=8,pady=5)
-                self.label(row,item["id"][:12]+"…",14,bold=True).pack(side="left",padx=14,pady=14)
-                self.label(row,"所有者 "+item["owner"],12,MUTED).pack(side="left",padx=12)
-                self.label(row,("Host "+item["host"]) if item.get("host") else "当前无 Host",12,ACCENT).pack(side="right",padx=14)
-            self.note(f"已加载 {len(items)} 个实例")
+                top=ctk.CTkFrame(row,fg_color='transparent');top.pack(fill='x',padx=14,pady=(10,4))
+                self.label(top,item.get('name') or item['id'][:12],14,bold=True).pack(side='left')
+                self.label(top,("Host "+item["host"]) if item.get("host") else "当前无 Host",12,ACCENT).pack(side='right')
+                self.label(row,(item.get('environment') or '未设置环境')+' · 所有者 '+item['owner']+' · '+({'idle':'可接管','preparing':'准备中','ready':'可加入','uploading':'上传中'}.get(item['state'],item['state'])),11,MUTED).pack(anchor='w',padx=14)
+                buttons=ctk.CTkFrame(row,fg_color='transparent');buttons.pack(fill='x',padx=14,pady=10)
+                for title,callback in [('开始',lambda r=item:self.play_room(r)),('绑定目录',lambda r=item:self.bind_room(r)),('成员',lambda r=item:self.room_members(r))]:
+                    self.button(buttons,title,callback,width=80).pack(side='left',padx=(0,8))
+                bound=self.bindings.get(item['id'])
+                if bound and (Path(bound['world'])/'.aetherloom/pending-session.json').is_file():
+                    self.button(buttons,'恢复检查',lambda r=item:self.inspect_room(r),width=85).pack(side='left',padx=(0,8))
+                if item.get('can_manage') or item['owner']==self.cloud_user or self.cloud_role=='root':
+                    if not item.get('head'):
+                        self.button(buttons,'上传世界',lambda r=item:self.create_room(r),width=85).pack(side='left',padx=(0,8))
+                    self.button(buttons,'管理',lambda r=item:self.manage_room(r),width=70).pack(side='right',padx=(8,0))
+                    self.button(buttons,'删除',lambda r=item:self.delete_room(r),width=70).pack(side='right')
+            self.note(f"已加载 {len(items)} 个共享房间；开始前先绑定本地游戏环境")
         self.cloud_task("/api/rooms",done)
 
-    def create_room(self):
-        if messagebox.askyesno("创建实例记录","当前版本仅创建云端记录，尚不能绑定存档或自动开服。继续？",parent=self):
-            self.cloud_task("/api/rooms",lambda _:self.rooms(),{})
+    def create_room(self,existing=None):
+        if self.shared or (self.process and self.process.poll() is None):self.note('请先保存退出游戏',True);return
+        binding=self.current_binding()
+        if not binding:return
+        selected=filedialog.askdirectory(parent=self,title='选择要发布的世界（包含level.dat）',initialdir=str(Path(binding['run'])/'saves'))
+        if not selected:return
+        world=Path(selected).resolve()
+        if (world/'.aetherloom/pending-session.json').exists():self.note('此世界有未处理的Host会话，请先恢复，禁止重新发布覆盖',True);return
+        if not (world/'level.dat').is_file() or world.parent!=Path(binding['run']).resolve()/'saves':
+            self.note('请选择当前运行目录 saves 下包含 level.dat 的世界目录',True);return
+        binding['world']=str(world)
+        name=existing.get('name') if existing else ctk.CTkInputDialog(text='共享房间名称',title='发布共同世界').get_input()
+        if not name:return
+        from .cloud import API,CloudWorld,LeaseGuard
+        api=API(self.server_url,self.token)
+        def publish():
+            if existing:
+                if existing.get('head'):raise ValueError('已有权威存档，请使用恢复候选审批，不能直接覆盖')
+                room=existing['id']
+                api('/api/rooms/'+room,dict(name=name,environment=binding['version'],world=world.name),method='PATCH')
+            else:room=api('/api/rooms',dict(name=name,environment=binding['version'],world=world.name))['id']
+            self.events.put((lambda _:self.note('正在发布 '+name+'，请勿打开此世界'),None,'notification'))
+            lease=api('/api/rooms/'+room+'/claim',{})
+            guard=LeaseGuard(api,room,lease)
+            try:
+                from .shared_session import repair
+                from .launcher import offline_uuid
+                repair(world,binding['java'],offline_uuid(binding['name']))
+                version=CloudWorld(api,self.settings.path.parent/'cache').upload(room,world,guard.lease,None)
+                return room,version
+            except Exception:
+                # Creation failed before any managed game launch; safe to release.
+                try:api('/api/rooms/'+room+'/cancel',guard.lease)
+                except Exception:pass
+                raise
+            finally:guard.close()
+        def done(result):
+            self.bindings[result[0]]=binding;self.save();self.note('共同存档发布成功');self.rooms()
+        self.task(publish,done)
+
+    def current_binding(self):
+        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory')}
+        if not b['root'] or not b['java'] or b['version']=='尚未选择':
+            self.note('先在实例配置中定位游戏目录、版本和Java',True);self.show('instance');return None
+        b['run']=b['run'] or b['root']
+        return b
+
+    def bind_room(self,room):
+        b=self.current_binding()
+        if not b:return
+        if not messagebox.askyesno('绑定共享房间',f"将当前本地版本 {b['version']} 绑定到房间 {room.get('name') or room['id']}？\n请确保版本、加载器和Mods与房间环境一致。\n作为Host时会将云端存档校验下载到专用世界目录。",parent=self):return
+        target=Path(b['run'])/'saves'/('Aetherloom-'+room['id'])
+        if (target/'.aetherloom/pending-session.json').exists():
+            import uuid
+            target=target.with_name(target.name+'-'+uuid.uuid4().hex[:8])
+        b['world']=str(target)
+        self.bindings[room['id']]=b;self.save()
+        self.cloud_task('/api/rooms/'+room['id']+'/join',lambda _:self.note('本地环境已绑定，可以点击此房间的开始'),{})
+
+    def delete_room(self,room):
+        if messagebox.askyesno('删除共享房间','删除 '+(room.get('name') or room['id'])+'？\n本地游戏目录不删除。活动Host必须先正常退出。',parent=self):
+            def done(_):self.bindings.pop(room['id'],None);self.save();self.rooms()
+            self.cloud_task('/api/rooms/'+room['id'],done,method='DELETE')
+
+    def manage_room(self,room):
+        dialog=ctk.CTkToplevel(self);dialog.title('管理共享房间');dialog.geometry('520x420');dialog.configure(fg_color=BG);dialog.transient(self)
+        self.label(dialog,room.get('name') or room['id'],19,bold=True).pack(anchor='w',padx=24,pady=(24,12))
+        name=ctk.CTkEntry(dialog,height=40,fg_color=CARD,border_color=BORDER);name.insert(0,room.get('name') or room['id']);name.pack(fill='x',padx=24,pady=8)
+        mode=ctk.CTkOptionMenu(dialog,values=['AUTO','RELAY','DIRECT'],fg_color=CARD,button_color=PRIMARY,height=38);mode.set(room.get('mode') or 'AUTO');mode.pack(fill='x',padx=24,pady=8)
+        def saved(_):dialog.destroy();self.rooms();self.note('房间配置已更新')
+        self.button(dialog,'保存名称和连接策略',lambda:self.cloud_task('/api/rooms/'+room['id'],saved,{'name':name.get(),'mode':mode.get()},method='PATCH'),True,width=220).pack(anchor='w',padx=24,pady=8)
+        self.button(dialog,'审阅并批准恢复候选',lambda:self.review_recovery(room),width=220).pack(anchor='w',padx=24,pady=8)
+        if room['owner']==self.cloud_user or self.cloud_role=='root':
+            owner=ctk.CTkEntry(dialog,placeholder_text='新的Owner软件账号',height=38,fg_color=CARD,border_color=BORDER);owner.pack(fill='x',padx=24,pady=8)
+            self.button(dialog,'转移所有权',lambda:self.cloud_task('/api/rooms/'+room['id'],saved,{'owner':owner.get()},method='PATCH'),width=150).pack(anchor='w',padx=24,pady=8)
+
+    def room_members(self,room):
+        def done(members):
+            dialog=ctk.CTkToplevel(self);dialog.title('共享房间成员');dialog.geometry('560x420');dialog.configure(fg_color=BG);dialog.transient(self)
+            self.label(dialog,'成员与实例权限',19,bold=True).pack(anchor='w',padx=24,pady=20)
+            listing=ctk.CTkScrollableFrame(dialog,fg_color=CARD);listing.pack(fill='both',expand=True,padx=24,pady=(0,20))
+            can_edit=room['owner']==self.cloud_user or self.cloud_role=='root'
+            def change(actor,role):
+                self.cloud_task('/api/rooms/'+room['id']+'/members',lambda _:(dialog.destroy(),self.room_members(room)),{'username':actor,'role':role})
+            for member in members:
+                row=ctk.CTkFrame(listing,fg_color='transparent');row.pack(fill='x',pady=8)
+                self.label(row,member['actor']+' · '+member['role'],13).pack(side='left',padx=8)
+                if can_edit and member['role']!='owner':
+                    self.button(row,'移除',lambda a=member['actor']:change(a,'remove'),width=60).pack(side='right',padx=4)
+                    self.button(row,'设成员' if member['role']=='admin' else '设管理员',lambda a=member['actor'],r=member['role']:change(a,'member' if r=='admin' else 'admin'),width=85).pack(side='right',padx=4)
+        self.cloud_task('/api/rooms/'+room['id']+'/members',done)
+
+    def review_recovery(self,room):
+        from .cloud import API
+        api=API(self.server_url,self.token);base='/api/rooms/'+room['id']
+        def load():return api(base+'/recoveries'),api(base+'/head')
+        def done(result):
+            candidates,head=result
+            if not candidates:self.note('暂无恢复候选');return
+            dialog=ctk.CTkToplevel(self);dialog.title('恢复候选审批');dialog.geometry('560x340');dialog.configure(fg_color=BG);dialog.transient(self)
+            self.label(dialog,'恢复将创建新版本，并保留当前权威版本。',16,bold=True).pack(anchor='w',padx=24,pady=(24,12))
+            self.label(dialog,'活动Host或审批基准变化时服务端会拒绝覆盖。',12,MUTED).pack(anchor='w',padx=24,pady=8)
+            labels={c['id'][:12]+' · '+c['actor']+' · 基准 '+str(c['parent'] or '无')[:10]:c['id'] for c in candidates}
+            choice=ctk.CTkOptionMenu(dialog,values=list(labels),fg_color=CARD,button_color=PRIMARY);choice.pack(fill='x',padx=24,pady=16)
+            def approve():
+                if not messagebox.askyesno('批准恢复','确认已经核对候选内容，并用它创建新的权威版本？',parent=dialog):return
+                self.cloud_task(base+'/recoveries/'+labels[choice.get()]+'/approve',lambda _:(dialog.destroy(),self.rooms(),self.note('恢复已批准并创建新权威版本')),{'expected_head':head['version']})
+            self.button(dialog,'批准恢复',approve,True,width=160).pack(anchor='e',padx=24,pady=16)
+        self.task(load,done)
+
+    def account_settings(self):
+        choice=ctk.CTkInputDialog(text='输入操作：改名 / 改密',title='软件账号设置').get_input()
+        if choice not in ('改名','改密'):return
+        dialog=ctk.CTkInputDialog(text='输入新名称' if choice=='改名' else '输入新密码（至少6位）',title=choice)
+        if choice=='改密':dialog.after(30,lambda:getattr(dialog,'_entry',None) and dialog._entry.configure(show='•'))
+        value=dialog.get_input()
+        if not value:return
+        def done(result):
+            if choice=='改名':self.cloud_user=result['username'];self.values['username'].set(result['username']);self.save()
+            else:self.token='';self.note('密码已修改，原登录已失效，请使用新密码重新登录')
+        self.cloud_task('/api/me',done,{'username' if choice=='改名' else 'password':value},method='PATCH')
+
+    def play_room(self,room):
+        if self.shared or self.launching or (self.process and self.process.poll() is None):self.note('已有游戏或共享任务运行，请先退出',True);return
+        if room['id'] not in self.bindings:self.bind_room(room);return
+        recovery=False
+        if room.get('host') and room['expires']<=time.time():
+            recovery=messagebox.askyesno('上一位Host异常离线','上一会话没有完成最终上传。\n是否明确使用最近已确认的云端版本接管？\n旧Host未上传的进度需要随后通过恢复审批处理。',parent=self)
+            if not recovery:return
+        from .shared_session import SharedSession
+        self.start_session(SharedSession,room,recovery)
+
+    def inspect_room(self,room):
+        if self.shared or self.launching or (self.process and self.process.poll() is None):self.note('请先退出游戏及当前任务',True);return
+        if not messagebox.askyesno('离线恢复检查','保留旧Host原始存档，复制一份进行离线检查。\n不开LAN、不占公共Host。正常退出后上传不可变候选，等待Owner或实例管理员审批。\n检查副本需要额外磁盘空间，继续？',parent=self):return
+        from .shared_session import OfflineInspection
+        self.start_session(OfflineInspection,room)
+
+    def start_session(self,session_type,room,recovery=False):
+        def notify(kind,value):
+            def apply(_):
+                if kind=='process':self.started(value)
+                else:self.note(value)
+            self.events.put((apply,None,'notification'))
+        self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']]),notify,recovery)
+        session=self.shared
+        self.launching=True;self.start.configure(state='disabled',text='共享会话准备中…')
+        def finished(_):
+            self.shared=None;self.launching=False
+            self.start.configure(state='normal' if not self.process or self.process.poll() is not None else 'disabled',text='启动游戏   →')
+            self.rooms()
+        def failed(error):finished(None);self.note(error,True)
+        self.task(lambda:asyncio.run(session.run()),finished,failed)
 
     def server_status(self):
         def done(r):
@@ -401,6 +573,8 @@ class Window(ctk.CTk):
         self.cloud_task("/api/status",done)
 
     def close(self):
+        if self.shared:
+            self.shared.stop=True;self.note('正在结束共享会话并处理保存，请完成后再关闭');return
         if self.pending:self.note("正在处理请求，请稍后再关闭");return
         self.save();self.destroy()
 

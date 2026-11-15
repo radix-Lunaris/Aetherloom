@@ -1,13 +1,11 @@
 # Aetherloom
 
-以自托管云存档为中心，让玩家轮流托管同一个 Minecraft 世界，自动完成游戏启动、联机与存档接续。
+以自托管云存档为中心，让玩家轮流托管同一个Minecraft世界，整合离线游戏启动、联机与存档接续。
 
-开发分支 dev；main 仅接收验收交付。当前提供Windows离线GUI启动器与Docker控制API开发包，尚未完成真实游戏Hop。
+开发在dev分支，main等待真实双机验收。客户端使用CustomTkinter，定位用户已准备的完整游戏环境并独立启动，不下载游戏、不调用外部启动器。首个完整目标为Windows x64 / Minecraft1.20.1 / Forge47.4.22。
 
-Python 3.11+：`python -m unittest discover -s tests -v`。
+服务端使用FastAPI与独立MySQL Docker容器。统一软件账号、房间与成员管理，SHA-256增量版本、唯一Host租约、恢复候选审批；CraftLink AUTO传输核心已接入TLS WebSocket中继与认证单端点UDP打洞。Forge Bridge已构建，负责受管LAN与正常保存事件。
 
-双击发行包内Aetherloom.exe；配套Java17，无需安装HMCL/PCL。用户提供完整.minecraft目录，仅支持离线游戏身份。
+客户端业务HTTPS47192；面板HTTPS38443加随机安全路径；443不承载业务。
 
-服务端上传dist/Aetherloom-Server.zip；Docker、HTTPS、随机路径高位端口管理面板及离线依赖构建详见DEPLOY.md。面板提供监测、实例列表和开户。自动Hop、Bridge、AUTO仍待接通，不可用当前包管理正式共同世界。
-
-详见 PLAN.md、CHECKPOINT.md。
+使用见[PLAY.md](PLAY.md)，构建见[BUILD.md](BUILD.md)，Docker部署见[DEPLOY.md](DEPLOY.md)。进度和实测边界见[CHECKPOINT.md](CHECKPOINT.md)。真实Minecraft双机Hop尚未通过验收，不将自动化传输测试视为完整游戏交付验收。

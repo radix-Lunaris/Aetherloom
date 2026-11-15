@@ -1,4 +1,4 @@
-"""SQLite transaction authority. No Minecraft files are scanned by this service."""
+"""Transactional world authority. No Minecraft files are scanned by this service."""
 import hashlib
 import json
 from pathlib import Path
@@ -9,6 +9,7 @@ import uuid
 import os
 from contextlib import contextmanager
 from .launcher import inside
+from .database import connect
 
 class Conflict(ValueError):
     pass
@@ -31,13 +32,8 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, room TEXT, parent TEXT,
 
     @contextmanager
     def connect(self):
-        c = sqlite3.connect(self.db, timeout=15)
-        c.row_factory = sqlite3.Row
-        try:
-            with c:
-                yield c
-        finally:
-            c.close()
+        with connect(self.db) as c:
+            yield c
 
     def create(self, owner):
         room = uuid.uuid4().hex
@@ -127,19 +123,21 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, room TEXT, parent TEXT,
         with self.connect() as c:
             if not c.execute("SELECT 1 FROM rooms WHERE id=?", (room,)).fetchone():
                 raise KeyError(room)
+            if parent and not c.execute('SELECT 1 FROM versions WHERE id=? AND room=?',(parent,room)).fetchone():
+                raise ValueError('Recovery parent does not belong to this world')
             vid = uuid.uuid4().hex
             c.execute("INSERT INTO versions VALUES (?,?,?,?,1,?)",
                       (vid,room,parent,json.dumps(manifest),actor))
             return vid
 
-    def restore(self, room, actor, candidate, expected_head):
+    def restore(self, room, actor, candidate, expected_head, root=False):
         with self.connect() as c:
             c.execute("BEGIN IMMEDIATE")
             r = c.execute("SELECT * FROM rooms WHERE id=?", (room,)).fetchone()
             if not r:
                 raise KeyError(room)
             manager = c.execute("SELECT 1 FROM managers WHERE room=? AND actor=?", (room,actor)).fetchone()
-            if r["owner"] != actor and not manager:
+            if r["owner"] != actor and not manager and not root:
                 raise PermissionError("Instance management permission required")
             if r["token"] and r["expires"] > self.clock():
                 raise Conflict("Stop current session before restoring")

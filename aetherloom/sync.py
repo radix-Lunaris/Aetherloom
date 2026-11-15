@@ -3,6 +3,7 @@ import hashlib
 import os
 from pathlib import Path
 import uuid
+import shutil
 from .launcher import inside
 
 def snapshot(world, store):
@@ -38,6 +39,8 @@ def materialize(world, manifest, store):
     store._validate(manifest)
     world = Path(world).resolve()
     world.mkdir(parents=True,exist_ok=True)
+    if (world/'.aetherloom/incomplete').exists():
+        raise ValueError('上次存档替换未完成，需先从本地备份恢复，禁止覆盖恢复日志')
     staging = inside(world, ".aetherloom/staging/" + uuid.uuid4().hex)
     staged = []
     for rel, entry in manifest.items():
@@ -57,14 +60,23 @@ def materialize(world, manifest, store):
         staged.append((temp,target))
     journal = inside(world, ".aetherloom/incomplete")
     journal.parent.mkdir(parents=True,exist_ok=True)
-    journal.write_text(str(staging),encoding="utf-8")
+    backup=inside(world,'.aetherloom/backups/'+uuid.uuid4().hex)
+    journal.write_text(str(backup),encoding="utf-8")
     for temp,target in staged:
         if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == hashlib.sha256(temp.read_bytes()).hexdigest():
             temp.unlink()
             continue
         target.parent.mkdir(parents=True,exist_ok=True)
+        if target.exists():
+            saved=inside(backup,target.relative_to(world).as_posix());saved.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(target,saved)
         os.replace(temp,target)
-    # Deletion policy deliberately not enabled until backups and world-lock
-    # integration exist. Callers must not advertise this as exact cloud checkout.
+    # Exact checkout: removed files remain in a local recovery backup.
+    for target in sorted(world.rglob('*')):
+        rel=target.relative_to(world)
+        if '.aetherloom' in rel.parts or target.name=='session.lock' or not target.is_file():continue
+        if rel.as_posix() not in manifest:
+            saved=inside(backup,rel.as_posix());saved.parent.mkdir(parents=True,exist_ok=True)
+            os.replace(target,saved)
     journal.unlink()
 

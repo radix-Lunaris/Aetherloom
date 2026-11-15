@@ -24,6 +24,14 @@ class SyncTests(unittest.TestCase):
             materialize(dest,m,s)
             self.assertEqual((dest/"level.dat").read_bytes(),b"world")
             self.assertFalse((dest/".aetherloom/incomplete").exists())
+            (dest/'stale.dat').write_bytes(b'keep in backup')
+            (dest/'level.dat').write_bytes(b'old local')
+            materialize(dest,m,s)
+            self.assertFalse((dest/'stale.dat').exists())
+            backups=list((dest/'.aetherloom/backups').rglob('stale.dat'))
+            self.assertEqual(backups[0].read_bytes(),b'keep in backup')
+            (dest/'.aetherloom/incomplete').write_text('interrupted')
+            with self.assertRaises(ValueError):materialize(dest,m,s)
             m["level.dat"]["hash"]="0"*64
             with self.assertRaises(ValueError):
                 materialize(root/"bad",m,s)

@@ -4,6 +4,9 @@ Windows Python3.11：
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-desktop.txt
+# 设置JAVA_HOME为JDK17，先构建两个Java模块。
+powershell -ExecutionPolicy Bypass -File scripts/build-playerdata.ps1
+powershell -ExecutionPolicy Bypass -File scripts/build-bridge.ps1
 powershell -ExecutionPolicy Bypass -File scripts/build-client.ps1
 powershell -ExecutionPolicy Bypass -File scripts/package-server.ps1
 ```
@@ -16,3 +19,5 @@ Java来源构建信息见runtime/release。CustomTkinter来源：https://github.
 Docker构建方式见DEPLOY.md；无需Windows构建依赖。
 
 桌面流程检查：python scripts/smoke_desktop.py，使用临时实例和模拟进程，不启动真实游戏。软件配置写入本机LOCALAPPDATA/Aetherloom/settings.json，首次可读取旧Qt版本的注册表配置；不保存软件密码或登录令牌。
+
+Bridge使用Forge官方MDK的Gradle8.8包装器（Apache-2.0），ForgeGradle和官方1.20.1映射。玩家数据辅助模块仅引入shared-playerdata的MIT NBT核心，不引入全目录扫描器或轮询。assets下构建产物会随完整客户端复制；源码构建需先完成两个Java模块。

@@ -24,7 +24,7 @@ class LaunchProcessTests(unittest.TestCase):
                 archive.write(Path(d)/"Main.class","Main.class")
             (base/"base.json").write_text(json.dumps({"id":"base","mainClass":"Main",
                 "assetIndex":{"id":"test"},"javaVersion":{"majorVersion":17},
-                "arguments":{"game":["--username","${auth_player_name}","--gameDir","${game_directory}"]}}),encoding="utf-8")
+                "arguments":{"game":["--username","${auth_player_name}","--gameDir","${game_directory}","--clientId","${clientid}","--xuid","${auth_xuid}"]}}),encoding="utf-8")
             (run/"forge.json").write_text(json.dumps({"id":"forge","inheritsFrom":"base"}),encoding="utf-8")
             indexes=root/"assets/indexes";indexes.mkdir(parents=True)
             (indexes/"test.json").write_text('{"objects":{}}')

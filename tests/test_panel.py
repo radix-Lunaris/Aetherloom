@@ -27,6 +27,6 @@ class PanelTests(unittest.TestCase):
                 r=c.post('/api/login',json={'username':'root','password':'a-panel-root-password'}).json()
                 result=c.get('/api/users',headers={'Authorization':'Bearer '+r['token']})
                 self.assertEqual(result.status_code,200)
-                self.assertEqual(set(result.json()[0]),{'name','role'})
+                self.assertEqual(set(result.json()[0]),{'name','role','disabled'})
                 for _ in range(10):self.assertEqual(c.post('/api/login',json={'username':'nobody','password':'wrong'}).status_code,401)
                 self.assertEqual(c.post('/api/login',json={'username':'nobody','password':'wrong'}).status_code,429)

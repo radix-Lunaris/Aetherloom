@@ -139,6 +139,8 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
     native_dir.mkdir(parents=True,exist_ok=True)
     cp = [java_path(p) for p in cp]
     variables = dict(auth_player_name=name, auth_uuid=offline_uuid(name), auth_access_token="0",
+        clientid="", auth_xuid="", auth_session="0", xuid="",
+        resolution_width="1280", resolution_height="720",
         user_type="legacy", user_properties="{}", version_name=version, version_type=m.get("type", "release"),
         game_directory=java_path(run), assets_root=java_path(root / "assets"), assets_index_name=asset_id,
         natives_directory=java_path(native_dir), launcher_name="Aetherloom", launcher_version="0.1.0",
@@ -177,10 +179,19 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
                 target.write_bytes(z.read(entry))
     return [str(java), f"-Xmx{memory}M", *jvm, m["mainClass"], *game], run
 
-def launch(*args, **kwargs):
+def launch(*args, quick_play=None, bridge_file=None, before_start=None, **kwargs):
     command, run = prepare(*args, **kwargs)
+    environment=None
+    if quick_play:
+        mode,value=quick_play
+        if mode not in ('Singleplayer','Multiplayer'):raise LaunchError('Unsupported quick play mode')
+        command.extend(['--quickPlayPath',java_path(run/'.aetherloom/quickplay.json'),'--quickPlay'+mode,value])
+    if bridge_file:
+        environment=dict(os.environ,AETHERLOOM_BRIDGE_FILE=str(bridge_file))
+        command.insert(1,'-Dsharedplayerdata.disable=true')
     logs = inside(run, '.aetherloom/logs')
     logs.mkdir(parents=True, exist_ok=True)
+    if before_start:before_start()
     with (logs / ('game-' + uuid.uuid4().hex + '.log')).open('wb') as output:
-        return subprocess.Popen(command, cwd=run, stdout=output, stderr=subprocess.STDOUT)
+        return subprocess.Popen(command, cwd=run, stdout=output, stderr=subprocess.STDOUT,env=environment)
 

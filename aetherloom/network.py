@@ -1,0 +1,149 @@
+"""CraftLink logical streams carried by authenticated TLS WebSockets."""
+import asyncio
+import contextlib
+import json
+import threading
+import weakref
+from urllib.parse import urlsplit, urlunsplit
+from .vendor.craftlink.auto_stream import AutoManager, AutoStream, Config, TcpPath, Kind
+
+
+class PolicyStream(AutoStream):
+    async def send_on(self,name,frame):
+        if self.metadata.get('mode')=='DIRECT' and name=='relay' and frame.kind==Kind.DATA:
+            return False
+        return await super().send_on(name,frame)
+
+
+class SocketWriter:
+    def __init__(self,ws):
+        self.ws=ws;self.pending=bytearray();self.closing=False
+
+    def write(self,data):
+        if len(self.pending)+len(data)>65580:raise ValueError('Frame buffer exceeded')
+        self.pending.extend(data)
+
+    async def drain(self):
+        data=bytes(self.pending);self.pending.clear()
+        await self.ws.send(data)
+
+    def close(self):
+        if not self.closing:
+            self.closing=True;asyncio.create_task(self.ws.close())
+
+    def is_closing(self):return self.closing
+
+
+class WebSocketPath(TcpPath):
+    def __init__(self,ws):
+        self.ws=ws
+        super().__init__(asyncio.StreamReader(limit=128*1024),SocketWriter(ws))
+        self.pump=asyncio.create_task(self.receive())
+
+    async def receive(self):
+        try:
+            async for data in self.ws:
+                if not isinstance(data,bytes):raise ValueError('Unexpected control data')
+                # Backpressure follows the bounded websocket receive queue.
+                while len(self.reader._buffer)>128*1024:await asyncio.sleep(.01)
+                self.reader.feed_data(data)
+        except Exception as e:self.reader.set_exception(ConnectionError(type(e).__name__))
+        finally:self.reader.feed_eof()
+
+    def close(self):
+        super().close();self.pump.cancel()
+
+
+class Network:
+    def __init__(self,url,token,request,on_status=None):
+        self.url,self.token,self.request=url,token,request
+        self.peers={};self.peer_sockets={};self.groups=set();self.stopped=threading.Event()
+        self.manager=AutoManager(candidate=lambda peer:self.peers.get(peer),on_status=on_status,config=Config(memory_limit=64*1024*1024))
+        self.tasks=set();self.server=None
+        self.paths=weakref.WeakSet()
+
+    async def path(self,info):
+        from websockets.asyncio.client import connect
+        parts=urlsplit(self.url)
+        url=urlunsplit(('wss' if parts.scheme=='https' else 'ws',parts.netloc,'/api/relay','',''))
+        ws=await connect(url,max_size=65580,max_queue=4,proxy=None,open_timeout=10)
+        try:
+            await ws.send(json.dumps(dict(token=self.token,sid=info['sid'],side=info['side'],resume=info['resume'])))
+            response=json.loads(await asyncio.wait_for(ws.recv(),10))
+            if not response.get('ok'):raise PermissionError('Relay attachment rejected')
+            path=WebSocketPath(ws);self.paths.add(path);return path
+        except BaseException:
+            await ws.close();raise
+
+    async def run_stream(self,info,reader,writer):
+        async def reconnect():return await self.path(info)
+        try:
+            path=await self.path(info)
+            stream=PolicyStream(self.manager,info['sid'],info['player'] if info['side']=='host' else info['host'],
+                info['side']=='host',reader,writer,path,reconnect,metadata={'generation':info['epoch'],'mode':info.get('mode','AUTO'),'channel':info.get('channel','data')})
+            await stream.run()
+        finally:
+            if writer:
+                writer.close()
+                with contextlib.suppress(Exception):await writer.wait_closed()
+
+    async def peer_group(self,info):
+        if info['sid'] in self.groups:return
+        self.groups.add(info['sid'])
+        self.spawn(self.run_stream(info,None,None))
+        if info.get('mode')=='RELAY':return
+        from .p2p import connect_peer
+        async def attempt():
+            peer_id=info['player'] if info['side']=='host' else info['host']
+            for delay in (0,5,15,30,60):
+                if self.stopped.is_set():return
+                if delay:await asyncio.sleep(delay)
+                try:
+                    peer,sock=await connect_peer(info,self.request,self.url,self.manager,self.stopped)
+                    self.peers[peer_id]=peer;self.peer_sockets[peer_id]=sock
+                    await peer.closed_event().wait()
+                    self.peers.pop(peer_id,None);self.peer_sockets.pop(peer_id,None);sock.close()
+                except (OSError,ValueError):continue
+        self.spawn(attempt())
+
+    def spawn(self,coro):
+        task=asyncio.create_task(coro);self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+        return task
+
+    async def listen(self,room):
+        async def accepted(reader,writer):
+            try:
+                info=await asyncio.to_thread(self.request,'/api/rooms/'+room+'/connections',{})
+                await self.peer_group(info['network'])
+                await self.run_stream(info,reader,writer)
+            except Exception:writer.close()
+        self.server=await asyncio.start_server(lambda r,w:self.spawn(accepted(r,w)),'127.0.0.1',0)
+        return self.server.sockets[0].getsockname()[1]
+
+    async def host(self,room,port):
+        attached=set()
+        async def attach(info):
+            reader,writer=await asyncio.open_connection('127.0.0.1',port)
+            await self.run_stream(info,reader,writer)
+        while True:
+            items=await asyncio.to_thread(self.request,'/api/rooms/'+room+'/connections')
+            for info in items:
+                if info['sid'] not in attached:
+                    attached.add(info['sid'])
+                    if info.get('channel')=='network':await self.peer_group(info)
+                    else:self.spawn(attach(info))
+            await asyncio.sleep(.5)
+
+    async def close(self):
+        self.stopped.set()
+        if self.server:self.server.close();await self.server.wait_closed()
+        self.manager.close()
+        for task in list(self.tasks):task.cancel()
+        await asyncio.gather(*list(self.tasks),return_exceptions=True)
+        for path in list(self.paths):
+            path.close()
+            with contextlib.suppress(Exception):await asyncio.wait_for(path.ws.close(),3)
+        for peer in self.peers.values():peer.close()
+        for sock in self.peer_sockets.values():sock.close()
+        self.peers.clear();self.peer_sockets.clear()

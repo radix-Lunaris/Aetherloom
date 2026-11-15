@@ -75,3 +75,31 @@ materialize尚未处理云端删除文件、精确镜像、空目录与完整恢
 5. 获取用户准备的实际游戏目录，真实双机验证后才能合main。
 
 远端描述修改未完成：当前连接未提供仓库元数据写接口，本机无gh。
+
+
+## 2026-11-16 实质功能补齐（进行中）
+- 用户保持现有CustomTkinter和Web样式，要求补齐账号、房间、真实联机。
+- 离线启动补充clientid/auth_xuid等元变量；真实Java测试通过，未拿到用户实际游戏目录复测。
+- CraftLink权限策略适配：root保护、admin/player、仅root任免admin、改名/改密/停用/删除、令牌撤销、玩家每自然月三次自助改名+改密、审计。
+- 持久共享房间增加名称/环境/世界/模式、成员权限、转移Owner、删除；活动Host禁止删除房间，账号需先处理其拥有的房间。
+- 11项本地回归测试通过。
+- 服务端MySQL独立容器准备完成，迁移和备份执行中。客户端业务HTTPS使用47192；面板38443加原安全路径，443不承载业务。
+- 尚未将UI房间记录误标为完整Hop；CraftLink AUTO与游戏Bridge仍需实际适配与验收。
+
+- MySQL线上迁移通过：accounts=3,sessions=5,rooms=1，SQLite保留；control/mysql健康，外部HTTPS47192与原面板通过验证。
+- Bridge Forge47.4.22完整编译/reobf成功，Java17辅助模块构建成功；尚无真实游戏双机验收。
+- 已引入CraftLink未修改的AutoStream/AutoPeer/可靠UDP等传输源码（SOURCE.json含哈希与GPL许可）；统一软件认证接入TLS WebSocket中继，单成员共享UDP承载与独立流，AUTO在中继上先可用并后台尝试认证UDP打洞。
+- 24项本地测试通过，包括上游流协议测试、真实WebSocket+UDP升级/多流/回退；发现连接关闭时ASGI重复close错误，已修正，需再次验证清理无错误。
+- 正在补充单世界修复冲突测试、恢复审批、完整客户端包与第二次部署。
+
+
+### 2026-11-16 持久化检查点：管理/网络已部署，游戏保存验收中
+- 26项自动化测试已通过；后续增加了成员鉴权和Bridge错误回执，需最终重跑。
+- MySQL独立临时库实测通过：模式、6位口令、8并发唯一Host、版本提交、改名冲突回滚、活动Host恢复保护、审计；临时库与授权已清理。
+- 生产API已更新，HTTPS47192/WSS实际512KiB端到端往返通过，临时账号和房间已删除，原有房间未修改。
+- Docker新目录受umask077影响无法由非root读取，已改COPY显式权限，并在up之前验证App工厂；先前失败更新已自动回滚，无数据覆盖。
+- 用户提供实际游戏根：D:/Data_games/MC/PCL 正式版 2.8.12/.minecraft/versions/new/.minecraft，版本1.20.1-Forge（47.4.22）。检查已通过clientid参数，独立启动不调用外部启动器。
+- 真实Minecraft：使用项目.local内独立运行目录和新测试世界；未加载或改动用户原有存档。已验证入世、自动LAN、协议763状态响应。
+- 实测修正Bridge：需pack.mcmeta避免Forge警告页阻止自动启动；不能在ServerStartedEvent直接publishServer，因为LocalPlayer尚为空，现等玩家进入世界后开放LAN；路径匹配使用Files.isSameFile兼容8.3短路径。
+- 正常退出的保存回执仍在实测诊断，未标记完整Hop通过。双机不同NAT、Host→Player→Host物品栏连续性尚未验收，main保持不合入。
+- 已构建过Windows包，但最终交付需以Bridge最新验证结果重新构建，不能把之前dist当最终验收包。

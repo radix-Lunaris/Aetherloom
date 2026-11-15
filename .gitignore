@@ -10,4 +10,9 @@ dist/
 runtime/
 *.spec
 wheelhouse/
+bridge/.gradle/
+bridge/build/
+playerdata/build/
+assets/*.jar
+.env
 

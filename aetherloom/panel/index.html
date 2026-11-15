@@ -60,14 +60,14 @@
 
     <section id="view-instances" class="view" hidden>
       <div class="page-heading"><div><p class="eyebrow">INSTANCES</p><h1>实例与会话</h1><p class="muted">查看共享实例，以及它当前由谁托管。</p></div><span class="count-badge" id="room-count">0 个实例</span></div>
-      <section class="surface table-surface"><div class="section-heading"><h2>全部实例</h2><span class="tiny-label">只读视图</span></div><div class="table-wrap"><table><thead><tr><th>实例 ID</th><th>所有者</th><th>当前 Host</th><th>状态</th><th>代次</th></tr></thead><tbody id="rooms"></tbody></table></div></section>
+      <section class="surface table-surface"><div class="section-heading"><h2>全部实例</h2><span class="tiny-label">房间管理</span></div><div class="table-wrap"><table><thead><tr><th>共享房间</th><th>游戏环境</th><th>所有者</th><th>当前 Host</th><th>状态</th><th>代次</th><th>操作</th></tr></thead><tbody id="rooms"></tbody></table></div></section>
     </section>
 
     <section id="view-accounts" class="view" hidden>
       <div class="page-heading"><div><p class="eyebrow">ACCOUNTS</p><h1>账号管理</h1><p class="muted">为朋友创建独立的软件账号。</p></div><span class="count-badge" id="account-count">0 个账号</span></div>
       <div class="accounts-grid">
-        <section class="surface table-surface"><div class="section-heading"><h2>服务器账号</h2><span class="tiny-label">软件登录身份</span></div><div class="table-wrap"><table><thead><tr><th>账号</th><th>服务器角色</th></tr></thead><tbody id="users"></tbody></table></div></section>
-        <section class="surface create-card"><h2>创建账号</h2><p class="muted">密码通过安全渠道交给使用者。</p><form id="create-user"><label for="new-name">账号名称</label><input id="new-name" placeholder="字母、数字、下划线或连字符" required pattern="[A-Za-z0-9_-]{1,32}" maxlength="32" autocomplete="off"><label for="new-password">初始密码</label><input id="new-password" type="password" placeholder="至少 12 位" required minlength="12" maxlength="1024" autocomplete="new-password"><label for="new-role">服务器角色</label><select id="new-role"><option value="player">Player · 普通账号</option><option id="admin-option" value="admin">Admin · 服务器管理员</option></select><button class="primary" type="submit">创建账号 <span>+</span></button></form><p class="permission-note">实例所有者、实例管理员和 Host 为独立身份，不由服务器角色直接替代。</p></section>
+        <section class="surface table-surface"><div class="section-heading"><h2>服务器账号</h2><span class="tiny-label">软件登录身份</span></div><div class="table-wrap"><table><thead><tr><th>账号</th><th>服务器角色</th><th>停用</th><th>操作</th></tr></thead><tbody id="users"></tbody></table></div></section>
+        <section class="surface create-card"><h2>创建账号</h2><p class="muted">密码通过安全渠道交给使用者。</p><form id="create-user"><label for="new-name">账号名称</label><input id="new-name" placeholder="2至32位，不包含空白" required minlength="2" maxlength="32" autocomplete="off"><label for="new-password">初始密码</label><input id="new-password" type="password" placeholder="至少 6 位" required minlength="6" maxlength="1024" autocomplete="new-password"><label for="new-role">服务器角色</label><select id="new-role"><option value="player">Player · 普通账号</option><option id="admin-option" value="admin">Admin · 服务器管理员</option></select><button class="primary" type="submit">创建账号 <span>+</span></button></form><p class="permission-note">实例所有者、实例管理员和 Host 为独立身份，不由服务器角色直接替代。</p></section>
       </div>
     </section>
     <footer class="workspace-footer">Aetherloom <span>你的世界，由你掌握。</span></footer>

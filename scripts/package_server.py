@@ -5,7 +5,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 root=Path(__file__).resolve().parent.parent
 output=root/"dist/Aetherloom-Server.zip"
 output.parent.mkdir(exist_ok=True)
-files=[root/x for x in ("compose.yaml","compose.offline.yaml",".dockerignore","LICENSE","THIRD_PARTY.md","DEPLOY.md")]
+files=[root/x for x in ("compose.yaml","compose.offline.yaml",".dockerignore",".env.example","LICENSE","THIRD_PARTY.md","DEPLOY.md","PLAY.md")]
+files += [root/'scripts'/x for x in ('render_nginx.py','check_mysql.py')]
 for directory in ("aetherloom","server"):
     files.extend(p for p in (root/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix!=".pyc")
 with ZipFile(output,"w",ZIP_DEFLATED) as z:
