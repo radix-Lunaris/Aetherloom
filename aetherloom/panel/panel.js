@@ -14,4 +14,3 @@ el("login").addEventListener("submit",async e=>{e.preventDefault();const button=
 el("refresh").addEventListener("click",()=>refresh().catch(e=>message(e.message)));
 el("logout").addEventListener("click",async()=>{try{await api("logout",{});}finally{token="";location.reload();}});
 el("create-user").addEventListener("submit",async e=>{e.preventDefault();const button=e.target.querySelector("button");button.disabled=true;try{await api("users",{username:el("new-name").value,password:el("new-password").value,role:el("new-role").value});el("new-password").value="";el("new-name").value="";await refresh();message("账号已创建，请通过安全渠道告知使用者。");}catch(error){message(error.message);}finally{button.disabled=false;}});
-
