@@ -58,7 +58,8 @@ POST /api/users，JSON为 {"username":"friend","password":"至少12位密码","r
 GUI在云服务页填写同一服务器地址、软件账号与密码登录。
 
 ## 当前验证边界
-本机没有Docker引擎；远端CI配置了Compose构建和容器健康检查，结果以对应提交的Actions为准。
+本机没有Docker引擎；170aa0e在远端CI通过Compose构建、非root容器启动与健康检查：
+https://github.com/radix-Lunaris/Aetherloom/actions/runs/43722630250
 源码API通过本地TestClient测试；客户端通过离屏GUI测试和EXE启动测试。
 真实Minecraft/Forge及双机Hop均未验证。所有缺项记入CHECKPOINT.md。
 

@@ -12,7 +12,9 @@
 - 下文旧检查点描述保留为历史，其中GUI/HTTP/Java打包已完成，以本更新为准。
 - Docker在GitHub Actions实际构建、非root启动、健康检查通过（977cb51与f55e9d7）。
 - EXE初测发现打包器从PATH误收集的ICU DLL与Qt冲突；移除并使用Windows10/11系统ICU后EXE离屏启动退出码0。构建脚本已固化修复。
-- Windows远端Java进程测试与本机结果不同，已固定Temurin17环境并增加失败日志，跟进最终CI结果。
+- 已修复Java17在英文Windows上的中文类路径编码问题：使用Windows原生短路径；路径无法表达且没有短路径时明确报错。
+- 170aa0e对应远端CI全部通过：Windows测试、Ubuntu测试、Docker构建与健康检查。https://github.com/radix-Lunaris/Aetherloom/actions/runs/43722630250
+- 交付文件：dist/Aetherloom-Windows.zip（附Java17）、dist/Aetherloom-Server.zip（Docker源码）。服务端上传清单和命令见DEPLOY.md。
 
 ## 已落地
 - 从远端初始化提交克隆独立 Aetherloom 目录，建立 dev。
