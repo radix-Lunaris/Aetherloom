@@ -15,6 +15,13 @@ aetherloom/、server/、compose.yaml、.dockerignore、LICENSE及本说明。
 不要上传客户端EXE、.minecraft、.venv或本机账号配置。
 
 Ubuntu24.04上先安装Docker Engine及Compose插件（使用Docker官方Ubuntu安装说明）。
+也可使用Ubuntu24.04仓库的软件包：
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2 unzip
+sudo systemctl enable --now docker
+```
+以下Docker命令需以root执行，或在前面加sudo。
 首次部署：
 ```bash
 cd /opt/aetherloom

@@ -11,6 +11,26 @@ from pathlib import Path
 class LaunchError(ValueError):
     pass
 
+def java_path(path):
+    """Java17's Windows launcher can lose characters outside the ANSI codepage."""
+    path=Path(path)
+    if os.name != 'nt':
+        return str(path)
+    import ctypes
+    if not path.exists():
+        return str(Path(java_path(path.parent))/path.name)
+    get_short=ctypes.windll.kernel32.GetShortPathNameW
+    size=get_short(str(path),None,0)
+    if size:
+        buffer=ctypes.create_unicode_buffer(size)
+        if get_short(str(path),buffer,size):
+            return buffer.value
+    try:
+        str(path).encode('mbcs')
+    except UnicodeEncodeError as exc:
+        raise LaunchError('Java17 cannot represent this path on this Windows locale; select an ASCII path or enable NTFS short filenames') from exc
+    return str(path)
+
 def inside(root, rel):
     root = Path(root).resolve()
     target = (root / rel).resolve()
@@ -116,11 +136,13 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
     if probe.returncode or major < required:
         raise LaunchError(f"Java {required}+ required")
     native_dir = inside(run, ".aetherloom/natives/" + uuid.uuid4().hex)
+    native_dir.mkdir(parents=True,exist_ok=True)
+    cp = [java_path(p) for p in cp]
     variables = dict(auth_player_name=name, auth_uuid=offline_uuid(name), auth_access_token="0",
         user_type="legacy", user_properties="{}", version_name=version, version_type=m.get("type", "release"),
-        game_directory=str(run), assets_root=str(root / "assets"), assets_index_name=asset_id,
-        natives_directory=str(native_dir), launcher_name="Aetherloom", launcher_version="0.1.0",
-        classpath=os.pathsep.join(cp), classpath_separator=os.pathsep, library_directory=str(root / "libraries"))
+        game_directory=java_path(run), assets_root=java_path(root / "assets"), assets_index_name=asset_id,
+        natives_directory=java_path(native_dir), launcher_name="Aetherloom", launcher_version="0.1.0",
+        classpath=os.pathsep.join(cp), classpath_separator=os.pathsep, library_directory=java_path(root / "libraries"))
     def expand(s):
         def replacement(x):
             if x[1] not in variables:
@@ -144,7 +166,7 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
     if not any(x in ("-cp", "-classpath") for x in jvm):
         jvm += ["-cp", os.pathsep.join(cp)]
     if not any(x.startswith("-Djava.library.path=") for x in jvm):
-        jvm += ["-Djava.library.path=" + str(native_dir)]
+        jvm += ["-Djava.library.path=" + java_path(native_dir)]
     for archive, excludes in natives:
         with zipfile.ZipFile(archive) as z:
             for entry in z.infolist():

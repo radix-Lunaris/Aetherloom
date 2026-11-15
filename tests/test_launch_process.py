@@ -33,7 +33,8 @@ class LaunchProcessTests(unittest.TestCase):
             logs=list((run/".aetherloom/logs").glob("*.log"))
             self.assertEqual(code,0,"\\n".join(p.read_text(encoding="utf-8",errors="replace") for p in logs))
             self.assertIn("OfflineUser",(run/"started.txt").read_text(encoding="utf-8"))
-            self.assertIn(str(run),(run/"started.txt").read_text(encoding="utf-8"))
+            arguments=(run/"started.txt").read_text(encoding="utf-8").split('|')
+            self.assertEqual(Path(arguments[arguments.index('--gameDir')+1]).resolve(),run.resolve())
             self.assertEqual(len(list((run/".aetherloom/logs").glob("*.log"))),1)
             (base/"base.jar").unlink()
             with self.assertRaises(LaunchError):

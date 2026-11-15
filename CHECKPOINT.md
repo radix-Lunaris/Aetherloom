@@ -10,6 +10,9 @@
 - 本机无Docker，CI加入容器构建与健康检查；以远端对应提交结果为准。
 - 自动Hop、shared-playerdata/Bridge、AUTO与管理面板未完成；GUI云页只是控制API入口，不能开共享世界。
 - 下文旧检查点描述保留为历史，其中GUI/HTTP/Java打包已完成，以本更新为准。
+- Docker在GitHub Actions实际构建、非root启动、健康检查通过（977cb51与f55e9d7）。
+- EXE初测发现打包器从PATH误收集的ICU DLL与Qt冲突；移除并使用Windows10/11系统ICU后EXE离屏启动退出码0。构建脚本已固化修复。
+- Windows远端Java进程测试与本机结果不同，已固定Temurin17环境并增加失败日志，跟进最终CI结果。
 
 ## 已落地
 - 从远端初始化提交克隆独立 Aetherloom 目录，建立 dev。
