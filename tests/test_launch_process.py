@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from aetherloom.launcher import launch,LaunchError,prepare
 
 @unittest.skipUnless(shutil.which("javac") and shutil.which("jar"),"JDK required for process test")
@@ -19,7 +20,8 @@ class LaunchProcessTests(unittest.TestCase):
             source.write_text('public class Main { public static void main(String[] args) throws Exception { java.nio.file.Files.writeString(java.nio.file.Path.of("started.txt"), String.join("|",args)); }}',encoding="utf-8")
             subprocess.run(["javac","--release","17",str(source)],check=True,capture_output=True)
             base=root/"versions/base";base.mkdir()
-            subprocess.run(["jar","cf",str(base/"base.jar"),"-C",d,"Main.class"],check=True,capture_output=True)
+            with zipfile.ZipFile(base/"base.jar","w") as archive:
+                archive.write(Path(d)/"Main.class","Main.class")
             (base/"base.json").write_text(json.dumps({"id":"base","mainClass":"Main",
                 "assetIndex":{"id":"test"},"javaVersion":{"majorVersion":17},
                 "arguments":{"game":["--username","${auth_player_name}","--gameDir","${game_directory}"]}}),encoding="utf-8")
