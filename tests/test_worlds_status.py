@@ -62,6 +62,8 @@ class StatusAndCompatibilityTests(unittest.TestCase):
                (NatSub.CONE,Filter.APDF,'NAT3','入站严格'),
                (NatSub.CONE,Filter.UNKNOWN,'过滤未测','入站未测'),
                (NatSub.HARD,Filter.UNKNOWN,'NAT4','入站未测'),
+               (NatSub.EASY_INC,Filter.UNKNOWN,'递增','入站未测'),
+               (NatSub.EASY_DEC,Filter.UNKNOWN,'递减','入站未测'),
                (NatSub.UNKNOWN,Filter.UNKNOWN,'未知','入站未测')]
         for sub,filtering,nat,inbound in cases:
             with self.subTest(sub=sub,filtering=filtering):

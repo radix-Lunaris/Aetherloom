@@ -127,7 +127,7 @@ class SharedSession:
         base='/api/rooms/'+self.room
         try:
             self.state('preflight',message='正在检查本地环境、账号权限和云端权威版本')
-            self.notify('status','游戏控制：'+('实验Agent（未承诺广版本支持）' if self.backend=='agent' else '稳定Bridge'))
+            self.notify('status','游戏控制：'+('Agent' if self.backend=='agent' else 'Bridge'))
             await self.prepare_java()
             await self.prepare_account()
             self.notify('status','正在核验房间权限和权威版本信息')
@@ -155,13 +155,13 @@ class SharedSession:
                 jar=assets()/'aetherloom-bridge-0.1.1.jar'
                 if self.backend=='bridge' and not jar.is_file():raise ValueError('交付包缺少Forge联机Bridge')
                 self.bridge=self.control(b['world'],game_uuid(b['name'],b.get('uuid')),join='127.0.0.1:'+str(port),config_dir=Path(b['run'])/'.aetherloom/control')
-                self.state('loading',message='正在启动游戏；等待Forge入服确认')
+                self.state('loading',message='正在启动游戏；等待连接与身份确认')
                 await asyncio.to_thread(self.game,bridge_file=self.bridge.config)
                 deadline=time.monotonic()+self.start_timeout
                 while not self.bridge.ready.is_set():
                     if self.bridge.error:raise ValueError(self.bridge.error)
                     if self.stop:return
-                    if self.process.poll() is not None or time.monotonic()>deadline:raise ValueError('玩家未能自动加入，请查看Forge握手日志')
+                    if self.process.poll() is not None or time.monotonic()>deadline:raise ValueError('玩家未能自动加入，请查看游戏连接与身份握手日志')
                     await asyncio.sleep(.25)
                 self.state('active',message='已自动加入Host共享世界')
                 self.notify('status','已自动加入共享世界')

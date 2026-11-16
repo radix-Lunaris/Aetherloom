@@ -25,6 +25,10 @@ def describe(root, version):
             loader, loader_version = 'neoforge', parts[2]
     if flag('--fml.forgeVersion'):
         loader, loader_version = 'forge', flag('--fml.forgeVersion')
+    if flag('--fml.neoForgeVersion'):
+        loader,loader_version='neoforge',flag('--fml.neoForgeVersion')
+    if any(lib.get('name','').startswith('org.quiltmc:quilt-loader:') for lib in data.get('libraries',[])):
+        loader='quilt';loader_version=next(lib['name'].split(':')[2] for lib in data['libraries'] if lib.get('name','').startswith('org.quiltmc:quilt-loader:'))
     if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', str(minecraft)):
         # Merged profiles can have a renamed client jar; use explicit version metadata.
         minecraft = data.get('patches', [{}])[0].get('version', minecraft) if data.get('patches') else minecraft

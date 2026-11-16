@@ -11,6 +11,7 @@ from .sync import snapshot, materialize
 from .world_lock import closed_world
 from .diagnostics import event
 from .transfer import TransferProgress
+from .parallel import transfer
 
 
 class API:
@@ -26,7 +27,8 @@ class API:
         event('api.request',method=request.get_method(),path=path,bytes=len(data or b''))
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
-                result=response.read() if raw else json.load(response)
+                result=response.read(4*1024*1024+1) if raw else json.load(response)
+                if raw and len(result)>4*1024*1024:raise ValueError('下载数据块超过4MiB')
                 event('api.response',method=request.get_method(),path=path,status=response.status,elapsed_ms=round((time.monotonic()-started)*1000))
                 return result
         except urllib.error.HTTPError as e:
@@ -60,8 +62,9 @@ class LeaseGuard:
 
 
 class CloudWorld:
-    def __init__(self,api,cache,progress=None,on_progress=None):
+    def __init__(self,api,cache,progress=None,on_progress=None,workers=4):
         self.api=api;self.cache=Authority(Path(cache));self.progress=progress or (lambda text:None);self.on_progress=on_progress
+        self.workers=max(1,min(8,int(workers)))
 
     def upload(self,room,world,lease,parent):
         return self._upload(room,world,parent,lease=lease)
@@ -83,11 +86,13 @@ class CloudWorld:
                 report.emit('compare',min(offset+4096,len(hashes)),len(hashes),35,40,'blocks','比对云端缺失块')
             total=sum(sizes[h] for h in missing);sent=0
             report.emit('transfer',0,total,40,95,message='仅上传云端缺失的数据块')
-            for h in missing:
+            def upload_block(h):
                 data=(self.cache.root/'blobs'/h[:2]/h).read_bytes()
                 headers={'X-Recovery':recovery} if recovery else {'X-Lease':lease['token'],'X-Epoch':str(lease['epoch'])}
                 self.api(base+'/blobs/'+h,data,method='PUT',headers=headers)
-                sent+=len(data);report.emit('transfer',sent,total,40,95,message='增量上传')
+                return len(data)
+            for size in transfer(missing,upload_block,self.workers):
+                sent+=size;report.emit('transfer',sent,total,40,95,message=f'增量上传 · {self.workers}线程')
             report.emit('commit',1,1,95,99,'steps','正在验证并提交云端版本')
             if recovery:version=self.api(base+'/recoveries',dict(ticket=recovery,parent=parent,manifest=manifest))['candidate']
             else:version=self.api(base+'/commit',dict(lease,parent=parent,manifest=manifest))['version']
@@ -108,11 +113,14 @@ class CloudWorld:
             checked+=sizes[h];report.emit('verify',checked,total,5,20,message='校验本地数据块缓存')
         transfer_total=sum(sizes[h] for h in missing);received=0
         report.emit('transfer',0,transfer_total,20,70,message='仅下载本地缺失的数据块')
-        for h in missing:
+        def download_block(h):
             data=self.api('/api/rooms/'+room+'/blobs/'+h,raw=True)
-            if hashlib.sha256(data).hexdigest()!=h:raise ValueError('云端数据块校验失败')
-            self.cache.put_blob(data);received+=len(data)
-            report.emit('transfer',received,transfer_total,20,70,message='增量下载')
+            if len(data)!=sizes[h] or hashlib.sha256(data).hexdigest()!=h:raise ValueError('云端数据块校验失败')
+            self.cache.put_blob(data)
+            return len(data)
+        for size in transfer(missing,download_block,self.workers):
+            received+=size
+            report.emit('transfer',received,transfer_total,20,70,message=f'增量下载 · {self.workers}线程')
         def progress(stage,done,total):
             report.emit(stage,done,total,70 if stage=='assemble' else 90,90 if stage=='assemble' else 99,
                         'bytes' if stage=='assemble' else 'files','重建并验证文件' if stage=='assemble' else '安全替换世界文件')

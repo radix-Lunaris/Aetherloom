@@ -1,0 +1,22 @@
+{
+  "purpose": "Derived semantic aliases for Fabric/Quilt, no game classes",
+  "derived_hash_format": "ASCII with LF line endings",
+  "sources": [
+    {
+      "minecraft": "1.20.1",
+      "mojang_mapping_sha256": "67bfc33ef0c7103f002d6ac134f8eddd3d67e2ce45d266e83816d1a2e2c9b01d",
+      "fabric_intermediary_sha256": "26b60a7dac40e19609cdf095f7124a79ea426d8a84344bc8883c7210f0294799",
+      "derived_sha256": "6d22395ab9db9dac1bb64e2eef45dfde7fcdc15d279827336fd79ee881d3b0a1",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.20.1/intermediary-1.20.1-v2.jar"
+    },
+    {
+      "minecraft": "1.21.1",
+      "mojang_mapping_sha256": "140c47931cccc8fc9e4c22d7603e2d714d1a953a146f51ea7397d95c955536ec",
+      "fabric_intermediary_sha256": "e8bd6a4c39e235ee2dc73063558610775c72a2572fa0c6b32915b149074012a6",
+      "derived_sha256": "b7e5114297236a4b2c7d4c10863daa9d4959b07710d2073c4212f71642dd8287",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/2244b6f072256667bcd9a73df124d6c58de77992/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.1/intermediary-1.21.1-v2.jar"
+    }
+  ]
+}

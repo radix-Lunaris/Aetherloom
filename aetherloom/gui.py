@@ -76,6 +76,7 @@ class Window(ctk.CTk):
         self.transfer_operation=''
         self.transfer_percent=0.
         self.selected_room=self.settings.data.get("selected_room", "")
+        self.presence_device=__import__('secrets').token_hex(16);self.presence_busy=False;self.presence_retry=0;self.presence_last=0;self.room_presence={}
         self.profiles=self.settings.data.get("local_profiles", {})
         self.profile_key=None
         self.java_busy=False
@@ -1064,9 +1065,27 @@ class Window(ctk.CTk):
         self.play_room(room)
 
     def auto_refresh(self):
+        self.refresh_presence()
         if self.page=='network':self.start_nat_probe()
         if self.token and not self.login_busy:self.rooms()
         self.after((5000 if self.page in ('cloud','home') else 15000)*2**self.refresh_failures,self.auto_refresh)
+
+    def refresh_presence(self):
+        room=self.session_info.get('room') if self.shared else self.selected_room
+        if not self.token or not room or room not in self.bindings or self.presence_busy or time.monotonic()<self.presence_retry or time.monotonic()-self.presence_last<8:return
+        self.presence_busy=True;token=self.token;url=self.server_url
+        def done(result):
+            self.presence_busy=False;self.presence_last=time.monotonic()
+            if token!=self.token:return
+            if isinstance(result,dict) and type(result.get('online'))==int:
+                self.room_presence[room]=result['online']
+                if self.session_info.get('room')==room:self.runtime_values['room_members'].configure(text=str(result['online'])+'（45秒成员心跳）')
+            else:self.presence_retry=time.monotonic()+60
+        def work():
+            try:result=self.request(url,token,'/api/rooms/'+room+'/presence',dict(device=self.presence_device))
+            except Exception:result=None
+            self.events.put((done,result,'notification'))
+        threading.Thread(target=work,name='Aetherloom room presence',daemon=True).start()
 
     def build_transfer_progress(self):
         panel=self.card(self.body);panel.grid(row=1,column=0,sticky='ew',pady=(0,12));panel.grid_columnconfigure(0,weight=1)
@@ -1117,7 +1136,7 @@ class Window(ctk.CTk):
         self.runtime_values['role'].configure(text=state.get('role','待确认'))
         self.runtime_values['room'].configure(text=item.get('name',room) or '未选择')
         self.runtime_values['players'].configure(text=str(state['world_players']) if state.get('world_players') is not None else '等待游戏上报')
-        self.runtime_values['room_members'].configure(text='未提供完整在线心跳；已就绪对端 '+str(state.get('players',0)))
+        self.runtime_values['room_members'].configure(text=str(self.room_presence[room])+'（45秒成员心跳）' if room in self.room_presence else '等待成员心跳；已就绪对端 '+str(state.get('players',0)))
         if state.get('phase') in ('failed','ended','complete'):
             self.runtime_values['speed'].configure(text='↑ 0 B/s · ↓ 0 B/s');self.runtime_values['local_links'].configure(text='0')
         event('session.state',**{key:state[key] for key in ('room','role','phase','mode','epoch','players','message') if key in state})
@@ -1134,10 +1153,10 @@ class Window(ctk.CTk):
         content=ctk.CTkScrollableFrame(p,fg_color='transparent');content.pack(fill='both',expand=True)
         card=self.card(content);card.pack(fill='x',pady=(0,12));card.grid_columnconfigure(1,weight=1)
         self.runtime_values={}
-        titles=[('state','运行状态'),('role','身份'),('path','通路'),('nat','NAT 类型'),('inbound','入站策略'),('punch','打洞进度'),('room','房间'),('room_members','房间内在线'),('players','已加入世界'),('local_links','本地连接'),('ping','中转延迟'),('peer_ping','对端延迟'),('speed','实时速度'),('traffic','累计流量'),('public','公网映射'),('scope','测量范围')]
+        titles=[('state','状态'),('role','身份'),('path','通路'),('nat','网络类型'),('inbound','入站可达'),('punch','打洞进度'),('room','房间'),('room_members','房间内在线'),('players','已加入世界'),('local_links','本地连接'),('ping','中转延迟'),('peer_ping','对端延迟'),('speed','实时速度'),('traffic','累计流量'),('public','公网映射'),('scope','测量范围')]
         for index,(key,title) in enumerate(titles):
-            self.label(card,title,12,MUTED).grid(row=index,column=0,sticky='nw',padx=(16,22),pady=5)
-            label=self.label(card,{'state':'未启动','nat':'未检测','inbound':'入站未测','punch':'尚未尝试','scope':'NAT诊断独立于游戏套接字，不替代实际直连验证'}.get(key,'—'),12,TEXT,wraplength=520,justify='left')
+            self.label(card,title,13,MUTED,bold=True).grid(row=index,column=0,sticky='nw',padx=(16,22),pady=5)
+            label=self.label(card,{'state':'未启动','nat':'未检测','inbound':'入站未测','punch':'尚未尝试','scope':'NAT诊断独立于游戏套接字，不替代实际直连验证'}.get(key,'—'),16 if key in ('state','path','punch') else 13,TEXT,bold=True,wraplength=520,justify='left')
             label.grid(row=index,column=1,sticky='w',padx=(0,16),pady=5);self.runtime_values[key]=label
         self.network_list=ctk.CTkFrame(content,fg_color=CARD);self.network_list.pack(fill='x',expand=True)
         self.network_empty=self.label(self.network_list,'尚无连接流。Host等待玩家时无需建立到自身的隧道。',13,MUTED)
@@ -1161,11 +1180,20 @@ class Window(ctk.CTk):
         key=state.get('session_id','network')
         display={k:state[k] for k in ('peer','channel','mode','active_path','relay_ready','direct_ready','switch_phase','last_reason','relay_rtt_ms','direct_rtt_ms','direct_endpoint','attempt','stage') if k in state}
         event('network.state',stream=key,**display)
+        if state.get('switch_phase') in ('ended','closed','reset'):
+            self.network_states.pop(key,None);row=self.network_rows.pop(key,None)
+            if row:row.destroy()
+            if not self.network_rows:self.network_empty.pack(anchor='w',padx=16,pady=16)
+            return
         if key not in self.network_rows:
             row=self.label(self.network_list,'',12,MUTED,justify='left',wraplength=650)
             row.pack(fill='x',padx=16,pady=10);self.network_rows[key]=row
         titles={'peer':'对端','channel':'通道','mode':'策略','active_path':'当前路径','relay_ready':'中继就绪','direct_ready':'直连验证','switch_phase':'迁移阶段','last_reason':'原因','relay_rtt_ms':'中继 RTT / ms','direct_rtt_ms':'直连 RTT / ms','direct_endpoint':'直连端点','attempt':'打洞轮次','stage':'打洞进度'}
-        self.network_rows[key].configure(text='流 '+str(key)[:12]+'\n'+'  ·  '.join(titles[k]+'：'+str(v) for k,v in display.items()))
+        phases={'relay':'中继','direct':'P2P直连','probing':'探测直连','verifying':'验证直连','reconnecting':'重连中','ended':'已结束','closing':'正在关闭','relay_first':'中继优先','fallback':'回退中继'}
+        def shown(k,value):
+            if type(value)==bool:return '就绪' if value else '未就绪'
+            return phases.get(value,value) if isinstance(value,str) and k in ('active_path','switch_phase','last_reason') else value
+        self.network_rows[key].configure(text='流 '+str(key)[:12]+'\n'+'  ·  '.join(titles[k]+'：'+str(shown(k,v)) for k,v in display.items()))
 
     def start_nat_probe(self):
         if self.nat_busy or self.nat_updated and time.monotonic()-self.nat_updated<300:return
@@ -1174,9 +1202,23 @@ class Window(ctk.CTk):
         def apply(result):
             self.nat_busy=False;self.nat_updated=time.monotonic()
             for key in ('nat','inbound','public'):self.runtime_values[key].configure(text=result.get(key,'未测出'))
+            sub=result.get('subtype');filtering=result.get('filtering')
+            color='#76C8FC' if sub=='cone' and filtering in ('eif','adf','adf_or_eif') else '#F0B667' if sub=='cone' and filtering=='apdf' else '#B7A4FF' if sub in ('sym_easy_inc','sym_easy_dec') else '#EE9696' if sub=='sym_hard' else MUTED
+            self.runtime_values['nat'].configure(text_color=color)
             self.runtime_values['scope'].configure(text=result.get('detail','独立诊断套接字'))
         def run():
-            try:result=probe_nat()
+            try:
+                from .vendor.craftlink.stun import default_servers
+                from urllib.parse import urlsplit
+                servers=None;has_responder=False
+                try:
+                    health=self.request(self.server_url,'','/health')
+                    ports=health.get('stun_ports',[]);host=urlsplit(self.server_url).hostname
+                    if host and len(ports)==2 and all(type(p)==int and 1<=p<=65535 for p in ports):
+                        servers=[(host,p) for p in ports]+default_servers();has_responder=True
+                except Exception:pass
+                result=probe_nat(servers=servers)
+                if not has_responder:result['detail']=result.get('detail','')+' · 服务器未公布双端口STUN，公共端点可能不支持过滤测试'
             except Exception as error:result={'nat':'未知（检测失败）','inbound':'入站未测','public':'未测出','detail':'诊断失败：'+type(error).__name__+'；不影响中继'}
             self.events.put((apply,result,'notification'))
         threading.Thread(target=run,name='Aetherloom NAT diagnostics',daemon=True).start()

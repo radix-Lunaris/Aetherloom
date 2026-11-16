@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from .store import Authority, Conflict
 from .management import install, edit_account, valid_name, password_hash, audit
 from . import __version__
+from .presence import Presence
 
 class Login(BaseModel):
     username: str
@@ -173,7 +174,8 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
 
     @app.get("/health")
     def health():
-        return {"status":"ok","version":__version__}
+        ports=[int(os.environ.get('AETHERLOOM_STUN_PORT','52718')),int(os.environ.get('AETHERLOOM_STUN_PORT2','52719'))] if os.environ.get('AETHERLOOM_STUN_ENABLED')=='1' else []
+        return {"status":"ok","version":__version__,"stun_ports":ports}
 
     @app.post("/api/login")
     def login(body:Login, request:Request):
@@ -388,6 +390,13 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
             if body.role=='admin':c.execute('INSERT INTO managers VALUES (?,?)',(room,body.username))
             audit(c,user['name'],'member_role',room,body.model_dump())
         return {'ok':True}
+
+    presence=Presence()
+    @app.post('/api/rooms/{room}/presence')
+    def room_presence(room:str,body:dict,user=Depends(participant)):
+        device=body.get('device','');active=body.get('active',True)
+        if not isinstance(device,str) or not re.fullmatch('[a-f0-9]{32}',device) or type(active)!=bool:raise HTTPException(400,'Invalid presence heartbeat')
+        return {'online':presence.heartbeat(user['name'],device,room,active),'ttl':presence.ttl}
 
     @app.post("/api/rooms/{room}/claim")
     def claim(room:str,body:Claim,user=Depends(participant)):

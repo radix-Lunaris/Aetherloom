@@ -20,5 +20,12 @@
     "original_sha256": "a4b413f6c5b2ec8dc23d6756024ae681e0025cbf97c9b5b85677d25004a55282",
     "vendored_sha256": "a9bd772c54ce91861f17aca152069a51a1bfb1d73e7f04aa550dc8a0411c88de",
     "patch": "Only redirect the two enum conversions and filtering constant import to a minimal nat_types adapter; wire/probe/classifier implementation unchanged."
+  },
+  "stun_responder": {
+    "source_path": "server/stun_server.py",
+    "commit": "8178a3df0e73a88c41bab70574014b98b1c36ffe",
+    "original_sha256": "4b420816b124a94e3e82ceb2aa859a736a57e12c5d2ce0ee84eb95d0cab9610d",
+    "vendored_sha256": "7128c5a96d6c416d3ac7237e7350252ac7407ea7304da595f4bfc8ff2d451886",
+    "patch": "Only replace relay_config import with local environment config. Binding, CHANGE-PORT, limiter and alternate-origin logic unchanged."
   }
 }

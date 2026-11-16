@@ -1,5 +1,6 @@
 services:
   control:
+    image: "${AETHERLOOM_CONTROL_IMAGE:-aetherloom-control:latest}"
     build:
       context: .
       dockerfile: server/Dockerfile
@@ -13,6 +14,9 @@ services:
       AETHERLOOM_MYSQL_USER: aetherloom
       AETHERLOOM_MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}"
       AETHERLOOM_P2P_BIND: "0.0.0.0:52861"
+      AETHERLOOM_STUN_ENABLED: "1"
+      AETHERLOOM_STUN_PORT: "52718"
+      AETHERLOOM_STUN_PORT2: "52719"
     depends_on:
       mysql:
         condition: service_healthy
@@ -32,6 +36,30 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+  stun:
+    image: "${AETHERLOOM_CONTROL_IMAGE:-aetherloom-control:latest}"
+    restart: unless-stopped
+    command: ["python", "-m", "aetherloom.stun_service"]
+    environment:
+      AETHERLOOM_STUN_ENABLED: "1"
+      AETHERLOOM_STUN_PORT: "52718"
+      AETHERLOOM_STUN_PORT2: "52719"
+    ports:
+      - "52718:52718/udp"
+      - "52719:52719/udp"
+    healthcheck:
+      disable: true
+    mem_limit: 64m
+    cpus: 0.15
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
   mysql:
     image: "${AETHERLOOM_MYSQL_IMAGE:-mysql:8.4}"
     restart: unless-stopped

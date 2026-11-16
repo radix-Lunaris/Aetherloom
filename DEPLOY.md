@@ -70,3 +70,7 @@ python -m pip download --only-binary=:all: --platform manylinux_2_28_x86_64 --pl
 ## 当前验证边界
 
 服务端MySQL迁移、HTTPS、真实ECS中继及同机双进程Minecraft联机已通过；真实A→B→A接管与独立物品栏/经验也已验证。不同电脑、不同NAT及更多Mods组合尚未覆盖。范围见PLAY.md。
+
+## 双端口 STUN（0.4.0a7）
+
+Compose 使用同一应用镜像运行独立 `stun` 服务，内存上限 64 MiB，不连接 MySQL，不挂载存档卷。除原有 HTTPS 和 UDP 52861 外，主机防火墙及云安全组须允许入站 UDP 52718、52719。更新时先备份 SQL、存档卷及配置，确认无活动 Host，再运行 `docker compose up -d --no-deps --no-build --wait control` 和 `docker compose up -d --no-deps --no-build stun`。保留独立 MySQL 容器及既有 HTTPS 配置。`/health` 广告 STUN 端口，客户端优先将此双端口用于真实过滤测试；仅容器启动成功不能证明公网 UDP 已放行。

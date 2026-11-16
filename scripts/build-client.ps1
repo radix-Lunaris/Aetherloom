@@ -10,7 +10,11 @@ foreach ($jar in @('aetherloom-bridge-0.1.1.jar','aetherloom-playerdata.jar','ae
 $licensesRoot = Join-Path $scratchRoot 'licenses'
 New-Item -ItemType Directory -Force $licensesRoot | Out-Null
 Copy-Item LICENSE,THIRD_PARTY.md -Destination $licensesRoot
-Copy-Item aetherloom/vendor/authlib/* -Destination $licensesRoot
+Copy-Item aetherloom/vendor/authlib/*.txt -Destination $licensesRoot
+Copy-Item aetherloom/vendor/authlib/SOURCE.json -Destination (Join-Path $licensesRoot 'authlib-SOURCE.json')
+Copy-Item aetherloom/vendor/asm/*.txt -Destination $licensesRoot
+Copy-Item aetherloom/vendor/asm/SOURCE.json -Destination (Join-Path $licensesRoot 'ASM-SOURCE.json')
+Copy-Item agent/resources/MAPPINGS-NOTICE.txt -Destination $licensesRoot
 Copy-Item playerdata/LICENSE.shared-playerdata -Destination $licensesRoot
 Copy-Item aetherloom/vendor/craftlink/SOURCE.json -Destination (Join-Path $licensesRoot 'CraftLink-SOURCE.json')
 Copy-Item bridge/SOURCE.json -Destination (Join-Path $licensesRoot 'Aetherloom-Bridge-SOURCE.json')

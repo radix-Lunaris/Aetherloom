@@ -20,7 +20,7 @@ class Game:
     def returncode(self):return self.exit_code
     def poll(self):return self.exit_code
 
-with tempfile.TemporaryDirectory() as d,patch('aetherloom.gui.probe_nat',return_value={'nat':'未知（测试未探测）','inbound':'入站未测','public':'未测出','detail':'test fixture'}):
+with tempfile.TemporaryDirectory() as d,patch('aetherloom.gui.probe_nat',return_value={'nat':'未知（测试未探测）','inbound':'入站未测','public':'未测出','detail':'test fixture'}),patch.object(Window,'request',side_effect=lambda url,token,path,body=None:{'stun_ports':[]} if path=='/health' else []):
     root=Path(d);version=root/'game/versions/test-forge';version.mkdir(parents=True)
     (version/'test-forge.json').write_text('{"javaVersion":{"majorVersion":17}}')
     ctk.set_appearance_mode('dark')

@@ -65,7 +65,10 @@ class BridgeControl:
                         count=data.get('players')
                         if type(count)!=int or not 0<=count<=10000:raise ValueError('Invalid player count')
                         control.world_players=count
-                    elif data['event']=='error':control.error='游戏控制模块报告失败，禁止提交权威存档；请查看游戏日志'
+                    elif data['event']=='error':
+                        from .diagnostics import safe
+                        detail=safe(str(data.get('message','')))[:600]
+                        control.error='游戏控制模块报告失败，禁止提交权威存档'+('：'+detail if detail else '；请查看游戏日志')
                     else:raise ValueError('Invalid lifecycle event')
                     self.reply(200,{'ok':True})
                 except (ValueError,KeyError,TypeError):self.reply(400,{'ok':False})

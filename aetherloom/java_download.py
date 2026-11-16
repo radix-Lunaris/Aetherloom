@@ -38,10 +38,10 @@ class TrustedRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(request,fp,code,msg,headers,newurl)
 
 
-def open_url(url):
+def open_url(url,headers=None):
     trusted_url(url)
     opener=urllib.request.build_opener(TrustedRedirect())
-    return opener.open(urllib.request.Request(url,headers={'User-Agent':'Aetherloom-Java-Manager','Accept':'application/json, application/octet-stream'}),timeout=20)
+    return opener.open(urllib.request.Request(url,headers={'User-Agent':'Aetherloom-Java-Manager','Accept':'application/json, application/octet-stream',**(headers or {})}),timeout=20)
 
 
 def release_package(major,open_request=open_url):
@@ -125,15 +125,24 @@ def install_runtime(major,directory,progress=None,cancel=None,open_request=open_
     stage=root/('.install-'+uuid.uuid4().hex);stage.mkdir()
     try:
         archive=stage/'runtime.zip.part';digest=hashlib.sha256();received=0;last=-1
-        with open_request(package['url']) as response,archive.open('xb') as output:
-            while chunk:=response.read(1024**2):
-                check_cancel(cancel);received+=len(chunk)
-                if received>package['size'] or received>MAX_ARCHIVE:raise ValueError('Java 下载大小超限')
-                digest.update(chunk);output.write(chunk)
-                report.emit('transfer',received,package['size'],0,85,message='下载官方Java')
-                percent=int(received*100/package['size'])
-                if percent!=last:
-                    progress(f'下载 Java {major}：{received/1024**2:.1f} / {package["size"]/1024**2:.1f} MiB（{percent}%）');last=percent
+        def range_progress(done,total):
+            report.emit('transfer',done,total,0,85,message='下载官方Java · 4线程')
+            progress(f'下载 Java {major}：{done/1024**2:.1f} / {total/1024**2:.1f} MiB（{done*100/total:.0f}%）')
+        from .ranged import download as range_download
+        ranged=open_request is open_url and range_download(package['url'],archive,package['size'],open_request,cancel,range_progress)
+        if ranged:
+            with archive.open('rb') as source:
+                while chunk:=source.read(1024**2):check_cancel(cancel);digest.update(chunk);received+=len(chunk)
+        else:
+            with open_request(package['url']) as response,archive.open('xb') as output:
+                while chunk:=response.read(1024**2):
+                    check_cancel(cancel);received+=len(chunk)
+                    if received>package['size'] or received>MAX_ARCHIVE:raise ValueError('Java 下载大小超限')
+                    digest.update(chunk);output.write(chunk)
+                    report.emit('transfer',received,package['size'],0,85,message='下载官方Java（源不支持分段）')
+                    percent=int(received*100/package['size'])
+                    if percent!=last:
+                        progress(f'下载 Java {major}：{received/1024**2:.1f} / {package["size"]/1024**2:.1f} MiB（{percent}%）');last=percent
         check_cancel(cancel)
         report.emit('verify',1,1,85,90,'steps','验证SHA-256与下载大小')
         if received!=package['size'] or digest.hexdigest()!=package['sha256']:

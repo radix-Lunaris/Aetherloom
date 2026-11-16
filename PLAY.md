@@ -77,3 +77,9 @@
 组件已内嵌单EXE，不必另装皮肤Mod/JAR。Java仍识别电脑已有安装。此功能无需修改既有ECS数据库；外置房间认证声明存放在原环境元数据中，客户端版本需一致升级。软件不收集或上传LittleSkin凭据至ECS。
 
 官方说明：https://manual.littlesk.in/yggdrasil/client 。传统Yggdrasil账号密码登录已接入；OAuth/Passkey暂未接入。实际账号授权和你的皮肤仍需在GUI验证。
+
+## 实验 Agent 加载器
+
+启用实验 Agent 后重新绑定共享房间。现已实测 Forge 1.20.1 和 NeoForge、Fabric、Quilt 1.21.1 的完整接续；只比较 Minecraft 游戏版本，不按 Forge 补丁号拒绝。其他组合执行运行时能力检查，失败会阻止共享存档提交；不代表所有版本均已实测。Fabric/Quilt 不要求另装控制 Mod 或 Fabric API。原 Bridge 托底仍用于受支持的 1.20.1 Forge 环境。
+
+房间在线人数使用约八秒心跳、四十五秒过期；它与游戏世界人数、Host 租约分别显示。联机状态的 NAT 来自独立诊断套接字，不能代替实际通道建立结果。

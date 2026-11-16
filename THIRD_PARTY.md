@@ -20,3 +20,7 @@ Single-file client: embedded project/dependency notices are accessible in the de
 Aetherloom Bridge 0.1.1: GPL-3.0-only; standalone source https://github.com/radix-Lunaris/Aetherloom-Bridge at 58b988891d2f96101b810ecfc0984aaeb2b0dbd5. The vendored bridge/SOURCE.json pins source hashes. Targets Minecraft 1.20.1 / Forge 47, tested against 47.4.22; not a universal cross-version Mod. It does not include the separate MIT shared-playerdata helper.
 
 authlib-injector1.2.8: unmodified upstream build56, source commit5437f5b465ee3f5be0a1e5e1ae3c50978114f6fb, https://github.com/yushijinhun/authlib-injector/tree/5437f5b465ee3f5be0a1e5e1ae3c50978114f6fb . AGPLv3-or-later with AUTHLIB-INJECTOR exception (unaltered binary bundling and Java Agent use). Corresponding source is available at that upstream commit. Full license and embedded dependency notices are preserved in aetherloom/vendor/authlib and the EXE license viewer; SOURCE.json pins URL/SHA-256. Used for LittleSkin Yggdrasil game identity/skins, independently of Aetherloom software login.
+
+## Agent 多加载器适配与 STUN
+
+ASM 9.7.1：官方 Maven Central，BSD 3-Clause；许可证和哈希位于 `aetherloom/vendor/asm/`，构建时重定位至私有命名空间并内嵌 EXE。Fabric intermediary 的 CC0 声明和 Mojang 映射声明随最小派生映射提供，见 `agent/resources/MAPPINGS-SOURCE.json` 与 `MAPPINGS-NOTICE.txt`。不分发完整原始 Mojang 映射。CraftLink 双端口 STUN responder 按 GPL 来源适配，版本及本地修改见 `aetherloom/vendor/craftlink/SOURCE.json`，没有移植原项目登录。

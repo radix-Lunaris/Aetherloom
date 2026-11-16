@@ -11,12 +11,15 @@ def nat_values(profile):
     elif sub=='cone':
         text='NAT1/2（完全锥形或地址受限锥形·P2P 轻松）' if grade in ('eif','adf') else 'NAT3 端口受限锥形' if grade=='apdf' else '锥形（过滤未测，NAT1/2/3 待定）'
     else:text='未知（映射未测出）'
+    detail=f'独立诊断套接字 · 已响应 {profile.responded_servers}/{profile.asked} 个已探测端点（候选 {profile.pool_size}）'
+    samples=getattr(profile,'mapped_ports',[])
+    if samples:detail+=' · 映射端口 '+','.join(map(str,samples[:8]))+' · 步长 '+str(getattr(profile,'step',0))
     return {'nat':text,'inbound':stun.NAT_FILTER_LABEL.get(grade,'入站未测'),
             'public':':'.join(map(str,profile.public)) if profile.public else '未测出',
-            'detail':f'独立诊断套接字 · 已响应 {profile.responded_servers}/{profile.asked} 个已探测端点（候选 {profile.pool_size}）',
+            'detail':detail,
             'subtype':sub,'filtering':filtering}
 
-def probe_nat():
+def probe_nat(servers=None):
     # Dedicated daemon diagnostic thread, isolated from the networking loop.
     # Run upstream's blocking probes inline here to avoid non-daemon executor
     # workers holding the application open during an unresponsive DNS lookup.
@@ -27,7 +30,12 @@ def probe_nat():
         except Exception as error:future.set_exception(error)
         return future
     loop.run_in_executor=inline
-    try:return nat_values(loop.run_until_complete(stun.detect_nat_type(timeout=.7,want=2,third_n=2)))
+    # Match CraftLink's diagnostic entrypoint: 3s responses, four answers,
+    # original third-probe and filtering budgets. Do not use connect shortcuts.
+    try:
+        from .diagnostics import event
+        profile=loop.run_until_complete(stun.detect_nat_type(servers=servers,log=lambda line:event('nat.probe',message=line)))
+        return nat_values(profile)
     finally:loop.close()
 
 def human_bytes(value):
