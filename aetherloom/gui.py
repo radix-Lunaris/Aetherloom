@@ -90,6 +90,8 @@ class Window(ctk.CTk):
         self.cloud_role=''
         data=self.settings.data
         self.bindings=data.get('room_bindings',{})
+        for binding in self.bindings.values():
+            if isinstance(binding,dict):binding.setdefault('java_mode','auto')
         self.auto_run=data.get('auto_run_path','')
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in

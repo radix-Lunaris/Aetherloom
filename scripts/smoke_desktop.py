@@ -24,8 +24,11 @@ with tempfile.TemporaryDirectory() as d:
     root=Path(d);version=root/'game/versions/test-forge';version.mkdir(parents=True)
     (version/'test-forge.json').write_text('{"javaVersion":{"majorVersion":17}}')
     ctk.set_appearance_mode('dark')
+    (root/'settings').mkdir()
+    (root/'settings/settings.json').write_text(json.dumps({'room_bindings':{'legacy':{'java':'old-bundled-path'}}}))
     window=Window(root/'settings');window.withdraw()
     try:
+        assert window.bindings['legacy']['java_mode']=='auto'
         window.values['root'].set(str(root/'game'))
         window.values['java'].set(str(root/'java.exe'))
         window.values['name'].set('OfflinePlayer')
