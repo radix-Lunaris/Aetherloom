@@ -133,22 +133,34 @@ class Network:
 
     def spawn(self,coro):
         task=asyncio.create_task(coro);self.tasks.add(task)
-        task.add_done_callback(self.tasks.discard)
+        def finished(task):
+            self.tasks.discard(task)
+            if not task.cancelled() and task.exception():
+                from .diagnostics import safe,event
+                error=task.exception()
+                event('network.task.failed',error=error)
+                self.on_status(dict(session_id='engine',channel='network',stage='联机任务异常：'+safe(type(error).__name__+': '+str(error))))
+        task.add_done_callback(finished)
         return task
 
-    async def listen(self,room):
+    async def listen(self,room,identity=None):
         async def accepted(reader,writer):
             try:
-                info=await asyncio.to_thread(self.request,'/api/rooms/'+room+'/connections',{})
+                info=await asyncio.to_thread(self.request,'/api/rooms/'+room+'/connections',{'identity':identity} if identity else {})
                 await self.peer_group(info['network'])
                 await self.run_stream(info,reader,writer)
-            except Exception:writer.close()
+            except Exception as error:
+                from .diagnostics import safe,event
+                event('network.connect.failed',error=error)
+                self.on_status(dict(session_id='engine',channel='network',stage='联机连接失败：'+safe(str(error))))
+                writer.close()
         self.server=await asyncio.start_server(lambda r,w:self.spawn(accepted(r,w)),'127.0.0.1',0)
         return self.server.sockets[0].getsockname()[1]
 
-    async def host(self,room,port):
+    async def host(self,room,port,on_identity=None):
         attached=set()
         async def attach(info):
+            if on_identity and info.get('identity'):on_identity(info['identity'])
             reader,writer=await asyncio.open_connection('127.0.0.1',port)
             await self.run_stream(info,reader,writer)
         while True:

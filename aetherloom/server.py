@@ -135,8 +135,8 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         await relay.websocket(ws)
 
     @app.post('/api/rooms/{room}/connections')
-    async def connect_room(room:str,user=Depends(participant)):
-        return relay.create(room,user['name'])
+    async def connect_room(room:str,body:dict={},user=Depends(participant)):
+        return relay.create(room,user['name'],body.get('identity'))
 
     @app.get('/api/rooms/{room}/connections')
     async def pending_connections(room:str,user=Depends(participant)):

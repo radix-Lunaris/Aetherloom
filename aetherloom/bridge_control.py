@@ -3,15 +3,19 @@ import json
 from pathlib import Path
 import secrets
 import threading
+import uuid
+from urllib.parse import unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class BridgeControl:
-    def __init__(self,world,identity,inspect=False,join=None,config_dir=None):
+    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None):
         self.world=Path(world).resolve();self.identity=identity
+        self.game_name=game_name
         self.token=secrets.token_urlsafe(32)
         self.ready=threading.Event();self.saved=threading.Event();self.stop=False;self.port=None
         self.error=None
+        self.peer_identities={}
         self.poll_count=0
         control=self
         class Handler(BaseHTTPRequestHandler):
@@ -24,6 +28,9 @@ class BridgeControl:
                 return secrets.compare_digest(self.headers.get('Authorization',''),'Bearer '+control.token)
             def do_GET(self):
                 if not self.authorized():self.reply(403,{});return
+                if self.path.startswith('/identity/'):
+                    name=unquote(self.path[len('/identity/'):]).lower()
+                    self.reply(200,{'uuid':control.peer_identities.get(name,{}).get('uuid')});return
                 control.poll_count+=1
                 self.reply(200,{'stop':control.stop})
             def do_POST(self):
@@ -52,6 +59,16 @@ class BridgeControl:
             'token':self.token,'world':str(self.world),'inspect':inspect,'identity':self.identity}
         if join:data['join']=join
         self.config.write_text(json.dumps(data),encoding='utf-8')
+
+    def register_peer(self,identity):
+        from .launcher import game_uuid
+        name=identity['name'].lower();value=str(uuid.UUID(game_uuid(identity['name'],identity['uuid'])))
+        if uuid.UUID(value)==uuid.UUID(self.identity) or self.game_name and name==self.game_name.lower():
+            raise ValueError('Player不能使用当前Host的名称或UUID')
+        for existing_name,existing in self.peer_identities.items():
+            if existing_name!=name and existing['uuid']==value:raise ValueError('不同游戏名称不能共用同一个UUID')
+            if existing_name==name and (existing['uuid']!=value or existing['actor']!=identity['actor']):raise ValueError('当前游戏会话不能变更身份归属')
+        self.peer_identities[name]={'uuid':value,'actor':identity['actor']}
 
     def close(self):
         self.server.shutdown();self.server.server_close();self.thread.join(timeout=2)

@@ -82,13 +82,26 @@ def coordinate(name):
     suffix = "-" + parts[3] if len(parts) == 4 else ""
     return f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}{suffix}.jar"
 
-def prepare(root, version, java, name, run_dir=None, memory=2048):
+def game_uuid(name, custom_uuid=None):
+    if custom_uuid is None:return offline_uuid(name)
+    if not isinstance(custom_uuid,str):raise LaunchError('UUID 必须为文本')
+    if not custom_uuid.strip():return offline_uuid(name)
+    try:
+        parsed=uuid.UUID(custom_uuid.strip())
+        if parsed.int==0:raise ValueError()
+        return parsed.hex
+    except (ValueError,AttributeError):
+        raise LaunchError('UUID 格式无效：请填写32位十六进制或带连字符的标准UUID；不能全部为零') from None
+
+
+def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=None):
     root, java = Path(root).resolve(), Path(java).resolve()
     run = Path(run_dir or root).resolve()
     if not root.is_dir() or not run.is_dir():
         raise LaunchError("Game root and run directory must already exist")
     if not re.fullmatch("[A-Za-z0-9_]{1,16}", name):
         raise LaunchError("Invalid offline name")
+    identity=game_uuid(name,custom_uuid)
     if not 512 <= memory <= 65536:
         raise LaunchError("Invalid memory limit")
     m = manifest(root, version)
@@ -140,7 +153,7 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
     native_dir = inside(run, ".aetherloom/natives/" + uuid.uuid4().hex)
     native_dir.mkdir(parents=True,exist_ok=True)
     cp = [java_path(p) for p in cp]
-    variables = dict(auth_player_name=name, auth_uuid=offline_uuid(name), auth_access_token="0",
+    variables = dict(auth_player_name=name, auth_uuid=identity, auth_access_token="0",
         clientid="", auth_xuid="", auth_session="0", xuid="",
         resolution_width="1280", resolution_height="720",
         user_type="legacy", user_properties="{}", version_name=version, version_type=m.get("type", "release"),

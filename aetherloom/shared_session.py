@@ -9,7 +9,7 @@ import time
 import uuid
 from .bridge_control import BridgeControl
 from .cloud import API,CloudWorld,LeaseGuard
-from .launcher import launch,offline_uuid
+from .launcher import launch,offline_uuid,game_uuid
 from .network import Network
 from .world_lock import closed_world
 from .runtime import hidden_process
@@ -48,7 +48,7 @@ class SharedSession:
 
     def game(self,**kwargs):
         b=self.binding
-        process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
+        process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),custom_uuid=b.get('uuid'),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
         self.process=process;self.notify('process',process)
         return process
 
@@ -66,13 +66,13 @@ class SharedSession:
             self.notify('status','权威版本已确认 '+head_info['version'][:10]+'，正在确认 Host 身份')
             if room['host'] and room['expires']>time.time():
                 if room['state']!='ready':raise ValueError('Host正在准备或上传，列表会自动更新，请稍后再在线启动')
-                port=await self.network.listen(self.room)
+                port=await self.network.listen(self.room,{'name':self.binding['name'],'uuid':game_uuid(self.binding['name'],self.binding.get('uuid'))})
                 self.notify('status','已建立本地联机代理，正在启动加入游戏')
                 b=self.binding
                 jar=assets()/'aetherloom-bridge-0.1.0.jar'
                 if not jar.is_file():raise ValueError('交付包缺少Forge联机Bridge')
                 mods=Path(b['run'])/'mods';mods.mkdir(exist_ok=True);shutil.copy2(jar,mods/jar.name)
-                self.bridge=BridgeControl(b['world'],offline_uuid(b['name']),join='127.0.0.1:'+str(port),config_dir=Path(b['run'])/'.aetherloom/control')
+                self.bridge=BridgeControl(b['world'],game_uuid(b['name'],b.get('uuid')),join='127.0.0.1:'+str(port),config_dir=Path(b['run'])/'.aetherloom/control')
                 await asyncio.to_thread(self.game,bridge_file=self.bridge.config)
                 deadline=time.monotonic()+180
                 while not self.bridge.ready.is_set():
@@ -108,12 +108,12 @@ class SharedSession:
                 self.notify('status','正在校验并同步云端权威存档')
                 head=await asyncio.to_thread(self.cloud.download,self.room,world)
                 if head!=lease['head']:raise ValueError('云端版本与租约基准不一致')
-                identity=offline_uuid(b['name'])
+                identity=game_uuid(b['name'],b.get('uuid'))
                 self.notify('status','权威存档同步完成，正在校验玩家数据并启动世界')
                 await asyncio.to_thread(repair,world,b['java'],identity)
                 mods=Path(b['run'])/'mods';mods.mkdir(exist_ok=True)
                 shutil.copy2(bridge_jar,mods/bridge_jar.name)
-                self.bridge=BridgeControl(world,identity)
+                self.bridge=BridgeControl(world,identity,game_name=b['name'])
                 pending.parent.mkdir(parents=True,exist_ok=True)
                 pending.write_text(json.dumps({'room':self.room,'parent':head,'epoch':lease['epoch'],'identity':identity,'state':'loading'}),encoding='utf-8')
                 self.guard.check()
@@ -126,7 +126,7 @@ class SharedSession:
                     if self.process.poll() is not None or time.monotonic()>deadline:raise ValueError('游戏未报告世界/LAN就绪，本地数据保留，请检查游戏日志')
                     await asyncio.sleep(.25)
                 self.guard.check()
-                host_task=self.network.spawn(self.network.host(self.room,self.bridge.port))
+                host_task=self.network.spawn(self.network.host(self.room,self.bridge.port,on_identity=self.bridge.register_peer))
                 await asyncio.to_thread(self.api,base+'/ready',credentials)
                 self.notify('status','共享世界已就绪 · 当前使用中继通道')
                 while not self.bridge.saved.is_set():
@@ -182,7 +182,7 @@ class OfflineInspection(SharedSession):
         pending=source/'.aetherloom/pending-session.json'
         if not pending.is_file():raise ValueError('此绑定目录没有待恢复的Host会话')
         original=json.loads(pending.read_text(encoding='utf-8'))
-        identity=offline_uuid(self.binding['name'])
+        identity=game_uuid(self.binding['name'],self.binding.get('uuid'))
         if original['identity']!=identity:raise ValueError('离线检查需要使用原Host的离线游戏身份；请先调整并重新绑定')
         if original.get('candidate'):raise ValueError('恢复候选已上传：'+original['candidate']+'，请等待实例管理员审批')
         world=source.parent/('Aetherloom-Recovery-'+uuid.uuid4().hex)

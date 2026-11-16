@@ -35,3 +35,11 @@ class RoomOptionsTests(unittest.TestCase):
                 self.assertEqual(len(result.json()['streams']),2)
                 self.assertNotIn(connection['resume'],result.text)
                 self.assertNotIn(connection['network']['shared'],result.text)
+                identity={'name':'Guest','uuid':'81f14300-fbc1-4a46-88f0-0d90db478198','actor':'spoofed'}
+                custom=client.post(base+'/connections',headers=member,json={'identity':identity})
+                self.assertEqual(custom.status_code,200)
+                self.assertEqual(custom.json()['identity']['actor'],'member')
+                changed=client.post(base+'/connections',headers=member,json={'identity':dict(identity,uuid='91f14300-fbc1-4a46-88f0-0d90db478198')})
+                self.assertEqual(changed.status_code,409)
+                invalid=client.post(base+'/connections',headers=member,json={'identity':dict(identity,uuid=123)})
+                self.assertLess(invalid.status_code,500)

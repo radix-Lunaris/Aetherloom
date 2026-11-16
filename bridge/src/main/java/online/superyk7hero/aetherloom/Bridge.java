@@ -12,6 +12,10 @@ import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerNegotiationEvent;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -52,6 +56,7 @@ public class Bridge {
             MinecraftForge.EVENT_BUS.addListener(this::started);
             MinecraftForge.EVENT_BUS.addListener(this::stopped);
             MinecraftForge.EVENT_BUS.addListener(this::tick);
+            MinecraftForge.EVENT_BUS.addListener(this::negotiate);
         } catch (Exception e) { throw new IllegalStateException("Invalid Aetherloom Bridge configuration", e); }
     }
 
@@ -61,12 +66,36 @@ public class Bridge {
             .header("Content-Type", "application/json").timeout(Duration.ofSeconds(3));
     }
 
+    private void negotiate(PlayerNegotiationEvent negotiation) {
+        if (config.has("join") || config.get("inspect").getAsBoolean()) return;
+        // Vanilla offline LAN derives UUID from the name. Apply the identity
+        // attached to this authenticated software member's scoped relay stream
+        // before login acceptance loads playerdata; never infer ownership by name.
+        negotiation.enqueueWork(() -> {
+            try {
+                String name = negotiation.getProfile().getName();
+                HttpRequest req = HttpRequest.newBuilder(URI.create(config.get("endpoint").getAsString()+"/identity/"+URLEncoder.encode(name,StandardCharsets.UTF_8)))
+                    .header("Authorization","Bearer "+config.get("token").getAsString()).timeout(Duration.ofSeconds(3)).GET().build();
+                HttpResponse<String> response = http.send(req,HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode()!=200) throw new IllegalStateException("Identity lookup rejected");
+                JsonObject identity=gson.fromJson(response.body(),JsonObject.class);
+                if (!identity.has("uuid") || identity.get("uuid").isJsonNull()) return;
+                UUID id=UUID.fromString(identity.get("uuid").getAsString());
+                java.lang.reflect.Field field=com.mojang.authlib.GameProfile.class.getDeclaredField("id");
+                field.setAccessible(true);field.set(negotiation.getProfile(),id);
+                if (!id.equals(negotiation.getProfile().getId())) throw new IllegalStateException("UUID update failed");
+            } catch(Exception e) {
+                negotiation.getConnection().disconnect(net.minecraft.network.chat.Component.literal("Aetherloom: UUID identity negotiation failed"));
+            }
+        });
+    }
+
     private void event(String type, int port, IntegratedServer server) throws Exception {
         JsonObject data = new JsonObject();
         data.addProperty("event", type);
         data.addProperty("port", port);
         data.addProperty("world", server == null ? config.get("world").getAsString() : server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().toString());
-        data.addProperty("uuid", server == null ? (Minecraft.getInstance().player == null ? config.get("identity").getAsString() : Minecraft.getInstance().player.getUUID().toString()) : server.getSingleplayerProfile().getId().toString());
+        data.addProperty("uuid", type.equals("error") ? config.get("identity").getAsString() : server == null ? (Minecraft.getInstance().player == null ? config.get("identity").getAsString() : Minecraft.getInstance().player.getUUID().toString()) : server.getSingleplayerProfile().getId().toString());
         HttpResponse<String> response = http.send(request().POST(HttpRequest.BodyPublishers.ofString(gson.toJson(data))).build(), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) throw new IllegalStateException("Bridge event rejected");
     }
@@ -123,7 +152,11 @@ public class Bridge {
         }
         if (mc.player != null && mc.level != null && mc.getSingleplayerServer() == null) {
             try { event("joined",0,null); joined=true; loaded=true; }
-            catch(Exception e) { System.err.println("Aetherloom: joined event rejected"); leave(); }
+            catch(Exception e) {
+                System.err.println("Aetherloom: joined identity/UUID rejected");
+                try { event("error",0,null); } catch(Exception ignored) {}
+                leave();finished=true;
+            }
             return;
         }
         if (connecting) return;

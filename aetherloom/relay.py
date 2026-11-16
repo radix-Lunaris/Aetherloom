@@ -8,6 +8,7 @@ import asyncio
 import secrets
 import time
 import uuid
+import re
 from dataclasses import dataclass, field
 from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from .vendor.craftlink.auto_stream import Decoder,Kind
@@ -28,6 +29,7 @@ class Pair:
     punch_keys: dict = field(default_factory=lambda: {s:secrets.token_urlsafe(32) for s in ('host','player')})
     shared: str = field(default_factory=lambda:secrets.token_hex(32))
     mode: str = 'AUTO'
+    identity: dict | None = None
 
 
 class Relay:
@@ -53,7 +55,7 @@ class Relay:
             if pair.host==old:pair.host=new
             if pair.player==old:pair.player=new
 
-    def create(self,room,actor):
+    def create(self,room,actor,identity=None):
         self.collect();r=self.room(room)
         if r['state']!='ready':raise HTTPException(409,'Host世界和网络尚未就绪')
         if actor==r['host']:raise HTTPException(409,'Host不能加入自己的联机通道')
@@ -62,16 +64,27 @@ class Relay:
         with self.store.connect() as c:
             settings=c.execute('SELECT mode FROM room_settings WHERE room=?',(room,)).fetchone()
         mode=settings['mode'] if settings and settings['mode'] else 'AUTO'
+        if identity is not None:
+            from .launcher import game_uuid
+            if not isinstance(identity,dict) or not re.fullmatch('[A-Za-z0-9_]{1,16}',str(identity.get('name',''))):
+                raise HTTPException(400,'游戏身份名称无效')
+            identity={'name':identity['name'],'uuid':game_uuid(identity['name'],identity.get('uuid'))}
+            for pair in self.pairs.values():
+                if pair.room!=room or pair.epoch!=r['epoch'] or not pair.identity:continue
+                if pair.player==actor and pair.identity!=identity:raise HTTPException(409,'当前会话不能变更游戏身份')
+                if pair.player!=actor and (pair.identity['name'].lower()==identity['name'].lower() or pair.identity['uuid']==identity['uuid']):
+                    raise HTTPException(409,'游戏名称或UUID已被当前会话其他成员使用')
         group=next((p for p in self.pairs.values() if p.room==room and p.epoch==r['epoch'] and p.host==r['host'] and p.player==actor and p.channel=='network'),None)
         if not group:
-            group=Pair(room,r['epoch'],r['host'],actor,channel='network',mode=mode);self.pairs[group.sid]=group
-        p=Pair(room,r['epoch'],r['host'],actor,mode=mode);self.pairs[p.sid]=p
+            group=Pair(room,r['epoch'],r['host'],actor,channel='network',mode=mode,identity=identity);self.pairs[group.sid]=group
+        p=Pair(room,r['epoch'],r['host'],actor,mode=mode,identity=identity);self.pairs[p.sid]=p
         return dict(self.info(p,'player'),network=self.info(group,'player'))
 
     @staticmethod
     def info(p,side):
         result=dict(sid=p.sid,room=p.room,epoch=p.epoch,host=p.host,player=p.player,resume=p.secrets[side],side=side,path='relay',channel=p.channel,mode=p.mode)
         if p.channel=='network':result.update(punch_key=p.punch_keys[side],shared=p.shared)
+        if p.identity:result['identity']=dict(p.identity,actor=p.player)
         return result
 
     def punch(self,sid,user):

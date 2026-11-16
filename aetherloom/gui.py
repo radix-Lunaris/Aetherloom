@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 import customtkinter as ctk
 import asyncio
-from .launcher import launch, inside
+from .launcher import launch, inside, game_uuid
 from . import __version__
 from .runtime import discover_java
 from .environment import describe, encode, validate
@@ -88,7 +88,7 @@ class Window(ctk.CTk):
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
-             ("url","https://artherlink.superyk7hero.online:47192"),("username","")]}
+             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid","")]}
         if self.values['url'].get().rstrip('/').lower() in ('https://artherlink.superyk7hero.online','https://artherlink.superyk7hero.online:443'):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else "")
@@ -223,11 +223,13 @@ class Window(ctk.CTk):
         for col,key,title in [(0,"name","离线玩家名称"),(1,"memory","最大内存 / MiB")]:
             f=ctk.CTkFrame(row,fg_color="transparent");f.grid(row=0,column=col,sticky="ew",padx=(0,10) if col==0 else (10,0))
             self.label(f,title,12,MUTED).pack(anchor="w",pady=(0,6));self.entry(f,key).pack(fill="x")
-        self.path_row(c,2,"Java · 从所选游戏目录自动查找，也可手动指定","java",True)
+        self.label(c,'自定义 UUID · 可选，留空按名称生成；修改后须重新绑定共享房间',12,MUTED).grid(row=2,column=0,sticky='w',padx=22,pady=(10,6))
+        self.entry(c,'uuid').grid(row=3,column=0,sticky='ew',padx=22)
+        self.path_row(c,4,"Java · 从所选游戏目录自动查找，也可手动指定","java",True)
         self.java_menu=ctk.CTkOptionMenu(c,values=['尚未发现 Java'],variable=self.values['java'],fg_color=CARD,button_color=PRIMARY,command=lambda _:self.save())
-        self.java_menu.grid(row=4,column=0,sticky='ew',padx=22,pady=8)
-        self.path_row(c,6,"运行目录 · 自动识别版本隔离，可手动修改","run",False)
-        self.button(c,"保存配置",self.save,primary=True,width=120).grid(row=8,column=0,sticky="e",padx=22,pady=20)
+        self.java_menu.grid(row=6,column=0,sticky='ew',padx=22,pady=8)
+        self.path_row(c,8,"运行目录 · 自动识别版本隔离，可手动修改","run",False)
+        self.button(c,"保存配置",self.save,primary=True,width=120).grid(row=10,column=0,sticky="e",padx=22,pady=20)
 
     def path_row(self,parent,row,title,key,file):
         self.label(parent,title,12,MUTED).grid(row=row,column=0,sticky="w",padx=22,pady=(10,6))
@@ -372,7 +374,8 @@ class Window(ctk.CTk):
         self.game_state.configure(text="正在检查游戏文件")
         def failed(message):
             self.launching=False;self.start.configure(state="normal",text="离线启动   →");self.game_state.configure(text="启动未完成");self.note(message,True)
-        self.task(lambda:launch(root,version,java,name,run or None,memory),self.started,failed)
+        custom_uuid=self.values['uuid'].get().strip()
+        self.task(lambda:launch(root,version,java,name,run or None,memory,custom_uuid=custom_uuid),self.started,failed)
 
     def started(self,process):
         self.launching=False;self.process=process;self.start.configure(text="游戏运行中")
@@ -510,7 +513,7 @@ class Window(ctk.CTk):
             try:
                 from .shared_session import repair
                 from .launcher import offline_uuid
-                repair(world,binding['java'],offline_uuid(binding['name']))
+                repair(world,binding['java'],game_uuid(binding['name'],binding.get('uuid')))
                 version=CloudWorld(api,self.settings.path.parent/'cache').upload(room,world,guard.lease,None)
                 return room,version
             except Exception:
@@ -524,7 +527,9 @@ class Window(ctk.CTk):
         self.task(publish,done)
 
     def current_binding(self):
-        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory')}
+        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid')}
+        try:game_uuid(b['name'],b['uuid'])
+        except ValueError as e:self.note(str(e),True);return None
         if not b['root'] or not b['java'] or b['version']=='尚未选择':
             self.note('先在本地游戏中定位游戏目录、版本和Java',True);self.show('instance');return None
         b['run']=b['run'] or b['root']
@@ -692,7 +697,7 @@ class Window(ctk.CTk):
 
     def remember_profile(self):
         if self.profile_key:
-            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name')}
+            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid')}
 
     def select_version(self,save=True):
         self.remember_profile()
@@ -700,9 +705,11 @@ class Window(ctk.CTk):
         self.profile_key=self.values['root'].get()+'|'+self.values['version'].get()
         profile=self.profiles.get(self.profile_key)
         if profile:
+            self.values['uuid'].set(profile.get('uuid',''))
             for key,value in profile.items():
                 if key in self.values:self.values[key].set(value)
         else:
+            if previous and previous!=self.profile_key:self.values['uuid'].set('')
             if previous and previous!=self.profile_key or self.values['run'].get()==self.auto_run:self.values['run'].set('')
             self.suggest_run()
         root,version=self.values['root'].get(),self.values['version'].get()

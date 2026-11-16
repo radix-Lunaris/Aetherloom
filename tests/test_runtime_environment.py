@@ -5,9 +5,19 @@ import unittest
 from aetherloom.runtime import discover_java
 from aetherloom.environment import describe, encode, validate
 from aetherloom.diagnostics import safe
+from aetherloom.launcher import game_uuid,offline_uuid,LaunchError
 
 
 class InstalledProfileTests(unittest.TestCase):
+    def test_optional_uuid_formats_default_and_invalid_values(self):
+        self.assertEqual(game_uuid('Player',''),offline_uuid('Player'))
+        self.assertEqual(game_uuid('Player','  '),offline_uuid('Player'))
+        expected='81f14300fbc14a4688f00d90db478198'
+        self.assertEqual(game_uuid('Player','81f14300-fbc1-4a46-88f0-0d90db478198'),expected)
+        self.assertEqual(game_uuid('Player',expected.upper()),expected)
+        for invalid in ('0'*32,'wrong','81f14300-fbc1-4a46'):
+            with self.assertRaises(LaunchError):game_uuid('Player',invalid)
+
     def test_runtime_discovery_is_scoped_and_selects_required_major(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)/'game';root.mkdir()

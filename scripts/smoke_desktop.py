@@ -67,13 +67,16 @@ with tempfile.TemporaryDirectory() as d:
             assert window.room_rows['0'][0] is row
             assert abs(window.room_list._parent_canvas.yview()[0]-position)<.01
             window.select_room(rooms[0]);assert 'room 0' in window.selected_hint.cget('text')
+        window.values['uuid'].set('81f14300-fbc1-4a46-88f0-0d90db478198')
         window.values['run'].set(str(root/'custom-run'));window.save()
         alternate=root/'game/versions/test-two';(alternate/'mods').mkdir(parents=True)
         (alternate/'test-two.json').write_text('{}')
         window.values['version'].set('test-two');window.select_version(save=False)
         assert window.values['run'].get()==str(alternate)
+        assert window.values['uuid'].get()==''
         window.values['version'].set('test-forge');window.select_version(save=False)
         assert window.values['run'].get()==str(root/'custom-run')
+        assert window.values['uuid'].get()=='81f14300-fbc1-4a46-88f0-0d90db478198'
         wait(window,lambda:window.pending==0)
         for page in ('home','instance','cloud','network','logs'):window.show(page);window.update()
         print('Desktop smoke passed: navigation, installed versions, UI-thread dispatch, launch/exit, login, private settings.')
