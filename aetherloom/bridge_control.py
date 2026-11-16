@@ -9,12 +9,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class BridgeControl:
-    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None,backend='bridge'):
+    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None,backend='bridge',auth_mode='offline',adapter='1.20.1-forge'):
         self.world=Path(world).resolve();self.identity=identity
         self.game_name=game_name
         self.token=secrets.token_urlsafe(32)
         self.ready=threading.Event();self.saved=threading.Event();self.stop=False;self.port=None
-        self.error=None
+        self.error=None;self.world_players=None
         self.backend=backend;self.capabilities=set();self.component=None
         self.peer_identities={}
         self.poll_count=0
@@ -29,6 +29,11 @@ class BridgeControl:
                 return secrets.compare_digest(self.headers.get('Authorization',''),'Bearer '+control.token)
             def do_GET(self):
                 if not self.authorized():self.reply(403,{});return
+                if self.path.startswith('/identity/by-uuid/'):
+                    try:identity=str(uuid.UUID(self.path[len('/identity/by-uuid/'):]))
+                    except ValueError:self.reply(400,{});return
+                    match=next((p for p in control.peer_identities.values() if p['uuid']==identity),None)
+                    self.reply(200,{'uuid':match['uuid'] if match else None});return
                 if self.path.startswith('/identity/'):
                     name=unquote(self.path[len('/identity/'):]).lower()
                     self.reply(200,{'uuid':control.peer_identities.get(name,{}).get('uuid')});return
@@ -56,6 +61,10 @@ class BridgeControl:
                     elif data['event']=='joined' and join:
                         if control.backend=='agent' and not control.capabilities:raise ValueError('Missing capabilities handshake')
                         control.ready.set()
+                    elif data['event']=='stats' and control.ready.is_set():
+                        count=data.get('players')
+                        if type(count)!=int or not 0<=count<=10000:raise ValueError('Invalid player count')
+                        control.world_players=count
                     elif data['event']=='error':control.error='游戏控制模块报告失败，禁止提交权威存档；请查看游戏日志'
                     else:raise ValueError('Invalid lifecycle event')
                     self.reply(200,{'ok':True})
@@ -65,7 +74,7 @@ class BridgeControl:
         self.config=Path(config_dir or self.world/'.aetherloom')/('bridge-'+secrets.token_hex(8)+'.json')
         self.config.parent.mkdir(parents=True,exist_ok=True)
         data={'endpoint':'http://127.0.0.1:'+str(self.server.server_port),
-            'token':self.token,'world':str(self.world),'inspect':inspect,'identity':self.identity}
+            'token':self.token,'world':str(self.world),'inspect':inspect,'identity':self.identity,'auth_mode':auth_mode,'adapter':adapter}
         if join:data['join']=join
         self.config.write_text(json.dumps(data),encoding='utf-8')
 

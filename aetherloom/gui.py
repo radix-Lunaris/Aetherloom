@@ -17,6 +17,9 @@ from .launcher import launch, inside, game_uuid
 from . import __version__
 from .runtime import find_runtimes, required_java, choose_java, compatibility, inspect_java,launch_compatibility
 from .environment import describe, encode, validate
+from .environment import authentication,validate_account,decode
+from .game_accounts import GameAccounts
+from .network_status import probe_nat,human_bytes
 from .diagnostics import setup, logger, safe, event
 
 BG="#101116"
@@ -100,7 +103,9 @@ class Window(ctk.CTk):
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
-             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid",""),("java_mode","auto"),("control_backend","bridge")]}
+             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid",""),("java_mode","auto"),("control_backend","bridge"),("game_account","")]}
+        self.game_accounts=GameAccounts(self.settings.path.parent)
+        self.offline_identity=('Player','')
         if self.values['url'].get().rstrip('/').lower() in ('https://artherlink.superyk7hero.online','https://artherlink.superyk7hero.online:443'):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else "")
@@ -123,7 +128,7 @@ class Window(ctk.CTk):
             self.nav[key]=b
         foot=ctk.CTkFrame(self.sidebar,fg_color="#20212D",corner_radius=10)
         foot.grid(row=9,column=0,padx=20,pady=(20,14),sticky="ew")
-        self.label(foot,"离线游戏身份",size=12,color=ACCENT).pack(anchor="w",padx=14,pady=(12,2))
+        self.label(foot,"游戏身份",size=12,color=ACCENT).pack(anchor="w",padx=14,pady=(12,2))
         self.identity=self.label(foot,self.values["name"].get(),size=14,bold=True)
         self.identity.pack(anchor="w",padx=14,pady=(0,12))
         self.label(self.sidebar,'v'+__version__,size=11,color="#696C81").grid(row=10,column=0,sticky="w",padx=28,pady=(0,24))
@@ -233,11 +238,13 @@ class Window(ctk.CTk):
         c=self.card(scroll);c.grid(row=1,column=0,sticky="ew",pady=(0,16));c.grid_columnconfigure(0,weight=1)
         self.label(c,"启动参数",17,bold=True).grid(row=0,column=0,sticky="w",padx=22,pady=(18,10))
         row=ctk.CTkFrame(c,fg_color="transparent");row.grid(row=1,column=0,sticky="ew",padx=22,pady=(0,12));row.grid_columnconfigure((0,1),weight=1)
-        for col,key,title in [(0,"name","离线玩家名称"),(1,"memory","最大内存 / MiB")]:
+        for col,key,title in [(0,"name","玩家名称"),(1,"memory","最大内存 / MiB")]:
             f=ctk.CTkFrame(row,fg_color="transparent");f.grid(row=0,column=col,sticky="ew",padx=(0,10) if col==0 else (10,0))
-            self.label(f,title,12,MUTED).pack(anchor="w",pady=(0,6));self.entry(f,key).pack(fill="x")
+            self.label(f,title,12,MUTED).pack(anchor="w",pady=(0,6))
+            widget=self.entry(f,key);widget.pack(fill='x')
+            if key=='name':self.game_name_entry=widget
         self.label(c,'自定义 UUID · 可选，留空按名称生成；修改后须重新绑定共享房间',12,MUTED).grid(row=2,column=0,sticky='w',padx=22,pady=(10,6))
-        self.entry(c,'uuid').grid(row=3,column=0,sticky='ew',padx=22)
+        self.game_uuid_entry=self.entry(c,'uuid');self.game_uuid_entry.grid(row=3,column=0,sticky='ew',padx=22)
         modes=ctk.CTkFrame(c,fg_color='transparent');modes.grid(row=4,column=0,sticky='ew',padx=22,pady=(18,8))
         for text,value in [('自动选择合适的 Java','auto'),('手动指定 Java','manual')]:
             ctk.CTkRadioButton(modes,text=text,value=value,variable=self.values['java_mode'],font=self.font(13),fg_color=PRIMARY,command=self.java_mode_changed).pack(side='left',padx=(0,28))
@@ -254,6 +261,137 @@ class Window(ctk.CTk):
         self.path_row(c,11,'运行目录 · 自动识别版本隔离，可手动修改','run',False)
         ctk.CTkCheckBox(c,text='实验 Agent 控制 · 仅用于测试，修改后重新绑定房间',variable=self.values['control_backend'],onvalue='agent',offvalue='bridge',command=self.save).grid(row=13,column=0,sticky='w',padx=22,pady=12)
         self.button(c,'保存配置',self.save,primary=True,width=120).grid(row=14,column=0,sticky='e',padx=22,pady=20)
+        self.build_game_accounts(scroll)
+        self.build_worlds(scroll)
+
+    def build_worlds(self,scroll):
+        card=self.card(scroll);card.grid(row=3,column=0,sticky='ew',pady=(0,16));card.grid_columnconfigure(0,weight=1)
+        self.label(card,'本地存档 · 自动识别',17,bold=True).grid(row=0,column=0,sticky='w',padx=22,pady=(18,8))
+        self.world_menu=ctk.CTkOptionMenu(card,values=['尚未选择运行目录'],fg_color=CARD,button_color=PRIMARY,command=self.select_world)
+        self.world_menu.grid(row=1,column=0,sticky='ew',padx=22,pady=8)
+        self.world_hint=self.label(card,'仅检测当前运行目录的saves；游戏运行时暂停，不扫描区块文件。',12,MUTED,wraplength=650)
+        self.world_hint.grid(row=2,column=0,sticky='w',padx=22,pady=8)
+        self.button(card,'发布选中存档',lambda:self.create_room(world_path=self.world_choices.get(self.world_menu.get(),{}).get('path')),True,width=160).grid(row=3,column=0,sticky='e',padx=22,pady=(8,20))
+        self.world_choices={};self.world_generation=0;self.world_scan_key=None
+        self.after(15000,self.auto_worlds)
+
+    def auto_worlds(self):
+        self.maybe_refresh_worlds();self.after(15000,self.auto_worlds)
+
+    def maybe_refresh_worlds(self):
+        run=self.values['run'].get().strip() or self.values['root'].get().strip()
+        try:signature=(run,(Path(run)/'saves').stat().st_mtime_ns)
+        except OSError:signature=(run,None)
+        if signature!=self.world_scan_key:self.refresh_worlds()
+
+    def refresh_worlds(self):
+        if self.shared or self.process and self.process.poll() is None:return
+        run=self.values['run'].get().strip() or self.values['root'].get().strip()
+        if not run or not hasattr(self,'world_menu'):return
+        try:self.world_scan_key=(run,(Path(run)/'saves').stat().st_mtime_ns)
+        except OSError:self.world_scan_key=(run,None)
+        self.world_generation+=1;generation=self.world_generation
+        from .worlds import discover
+        def done(worlds):
+            if generation!=self.world_generation:return
+            old=self.world_menu.get();self.world_choices={}
+            for world in worlds:
+                title=(world.get('world_name') or world['folder'])+' · '+(world.get('game_version') or '版本未知')+' · '+world['folder']
+                if world['error']:title+=' · 损坏/不可读'
+                self.world_choices[title]=world
+            self.world_menu.configure(values=list(self.world_choices) or ['当前运行目录没有存档'])
+            self.world_menu.set(old if old in self.world_choices else next(iter(self.world_choices),'当前运行目录没有存档'))
+            self.select_world(self.world_menu.get())
+        self.task(lambda:discover(run),done)
+
+    def select_world(self,label):
+        world=self.world_choices.get(label)
+        if not world:self.world_hint.configure(text='当前运行目录没有检测到存档；可在共享世界发布时手动定位。');return
+        detail=world['error'] or ' · '.join((world.get('gametype',''),world.get('difficulty',''),'极限' if world.get('hardcore') else '普通世界'))
+        if world.get('last_played'):
+            try:detail+=' · 最近游玩 '+time.strftime('%Y-%m-%d %H:%M',time.localtime(world['last_played']))
+            except (ValueError,OSError,OverflowError):pass
+        self.world_hint.configure(text=world['path']+'\n'+detail)
+
+    def build_game_accounts(self,scroll):
+        card=self.card(scroll);card.grid(row=2,column=0,sticky='ew',pady=(0,16));card.grid_columnconfigure(0,weight=1)
+        self.label(card,'Minecraft 游戏账号',17,bold=True).grid(row=0,column=0,sticky='w',padx=22,pady=(18,8))
+        self.label(card,'与Aetherloom软件账号独立。LittleSkin使用角色真实UUID，不与旧离线背包按昵称合并。',12,MUTED,wraplength=650).grid(row=1,column=0,sticky='w',padx=22,pady=8)
+        self.game_account_menu=ctk.CTkOptionMenu(card,values=['离线游戏账号'],command=self.select_game_account,fg_color=CARD,button_color=PRIMARY)
+        self.game_account_menu.grid(row=2,column=0,sticky='ew',padx=22,pady=8)
+        row=ctk.CTkFrame(card,fg_color='transparent');row.grid(row=3,column=0,sticky='w',padx=22,pady=(8,20))
+        self.button(row,'添加 LittleSkin',self.add_littleskin,width=150).pack(side='left',padx=(0,12))
+        self.button(row,'退出所选账号',self.remove_game_account,width=150).pack(side='left')
+        self.refresh_game_accounts()
+
+    def refresh_game_accounts(self):
+        self.game_choices={'离线游戏账号':''}
+        for key in list(self.game_accounts.rows):
+            p=self.game_accounts.public(key);self.game_choices['LittleSkin · '+p['name']+' · '+p['id'][:8]]=key
+        self.game_account_menu.configure(values=list(self.game_choices))
+        key=self.values['game_account'].get()
+        self.game_account_menu.set(next((label for label,value in self.game_choices.items() if value==key),'角色未登录，请重新添加'))
+        self.game_name_entry.configure(state='disabled' if key else 'normal')
+        self.game_uuid_entry.configure(state='disabled' if key else 'normal')
+
+    def select_game_account(self,label):
+        if self.shared or self.launching or self.process and self.process.poll() is None:self.note('请先结束游戏再切换账号',True);self.refresh_game_accounts();return
+        key=self.game_choices[label];old=self.values['game_account'].get()
+        if key:
+            p=self.game_accounts.public(key)
+            if self.values['uuid'].get() and game_uuid(self.values['name'].get(),self.values['uuid'].get())!=p['id']:
+                if not messagebox.askyesno('切换游戏身份','LittleSkin使用角色真实UUID。原离线背包不会自动迁移或合并；共享房间需要重新绑定。继续？',parent=self):self.refresh_game_accounts();return
+            if not old:self.offline_identity=(self.values['name'].get(),self.values['uuid'].get())
+            self.values['name'].set(p['name']);self.values['uuid'].set(p['id'])
+        elif old:
+            self.values['name'].set(self.offline_identity[0]);self.values['uuid'].set(self.offline_identity[1])
+        self.values['game_account'].set(key);self.save();self.refresh_summary();self.refresh_game_accounts()
+
+    def add_littleskin(self):
+        if self.shared or self.launching or self.process and self.process.poll() is None:self.note('请先结束游戏，再更换游戏账号',True);return
+        dialog=ctk.CTkToplevel(self);dialog.title('LittleSkin 外置登录');dialog.geometry('520x440');dialog.configure(fg_color=BG);dialog.transient(self)
+        self.label(dialog,'LittleSkin 游戏账号',20,bold=True).pack(anchor='w',padx=24,pady=(22,8))
+        self.label(dialog,'凭据仅发送给 littleskin.cn，密码不保存；登录令牌使用Windows用户加密。',12,MUTED,wraplength=460).pack(anchor='w',padx=24,pady=8)
+        username=ctk.CTkEntry(dialog,placeholder_text='邮箱或角色名',height=38);username.pack(fill='x',padx=24,pady=8)
+        password=ctk.CTkEntry(dialog,placeholder_text='LittleSkin密码',show='•',height=38);password.pack(fill='x',padx=24,pady=8)
+        role=ctk.CTkOptionMenu(dialog,values=['登录后选择角色'],fg_color=CARD,button_color=PRIMARY);role.pack(fill='x',padx=24,pady=8)
+        status=self.label(dialog,'请先在LittleSkin网站创建角色并设置皮肤。',12,MUTED,wraplength=460);status.pack(anchor='w',padx=24,pady=8)
+        pending={}
+        def failed(error):
+            if dialog.winfo_exists():status.configure(text=error);login.configure(state='normal')
+        def logged(result):
+            if not dialog.winfo_exists():return
+            pending['result'],profiles=result;pending['roles']={p['name']+' · '+p['id'][:8]:p for p in profiles}
+            role.configure(values=list(pending['roles']));role.set(next(iter(pending['roles'])))
+            status.configure(text='登录成功，请选择角色并保存。');login.configure(state='normal');save.configure(state='normal')
+        def authenticate():
+            user,secret=username.get().strip(),password.get();password.delete(0,'end')
+            if not user or not secret:status.configure(text='请输入LittleSkin账号和密码');return
+            login.configure(state='disabled');save.configure(state='disabled');pending.clear()
+            self.task(lambda:self.game_accounts.login(user,secret),logged,failed)
+        def saved(key):
+            self.refresh_game_accounts()
+            self.select_game_account(next(label for label,value in self.game_choices.items() if value==key));dialog.destroy()
+            self.note('LittleSkin角色已添加；共享房间需使用对应认证模式并重新绑定')
+        def commit():
+            if 'result' not in pending:return
+            result=pending['result'];selected=pending['roles'][role.get()]
+            save.configure(state='disabled')
+            self.task(lambda:self.game_accounts.add(result,selected),saved,failed)
+        login=self.button(dialog,'登录',authenticate,True,width=140);login.pack(side='left',padx=24,pady=18)
+        save=self.button(dialog,'保存所选角色',commit,width=180);save.pack(side='right',padx=24,pady=18);save.configure(state='disabled')
+
+    def remove_game_account(self):
+        key=self.values['game_account'].get()
+        if not key:return
+        if self.shared or self.launching or self.process and self.process.poll() is None:self.note('请先结束游戏',True);return
+        def done(_):self.select_game_account('离线游戏账号');self.refresh_game_accounts();self.note('LittleSkin本地授权已清除，旧房间绑定需重新配置')
+        self.task(lambda:self.game_accounts.remove(key),done)
+
+    def check_game_identity(self,binding):
+        if binding.get('game_account'):
+            p=self.game_accounts.public(binding['game_account'])
+            if binding['name']!=p['name'] or game_uuid(binding['name'],binding.get('uuid'))!=p['id']:raise ValueError('LittleSkin角色名称和UUID不能自定义，请重新选择角色')
 
     def path_row(self,parent,row,title,key,file):
         self.label(parent,title,12,MUTED).grid(row=row,column=0,sticky="w",padx=22,pady=(10,6))
@@ -317,6 +455,8 @@ class Window(ctk.CTk):
         self.breadcrumb.configure(text="工作台  /  "+{"home":"开始游戏","instance":"本地游戏","cloud":"共享世界","network":"联机状态","logs":"运行记录"}[name])
         self.refresh_summary()
 
+        if name=='network':self.start_nat_probe()
+
     def refresh_summary(self):
         version=self.values["version"].get()
         self.instance_title.configure(text=(version[:32] if version!="尚未选择" else "尚未绑定"))
@@ -345,7 +485,7 @@ class Window(ctk.CTk):
         self.remember_profile()
         try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},room_bindings=self.bindings,auto_run_path=self.auto_run,selected_room=self.selected_room,local_profiles=self.profiles))
         except OSError as e:self.note("配置保存失败："+str(e),True);return False
-        self.refresh_summary();self.note("配置已保存");return True
+        self.refresh_summary();self.maybe_refresh_worlds();self.note("配置已保存");return True
 
     def pick(self,key,file=False):
         value=filedialog.askopenfilename(parent=self,title="选择 Java",filetypes=[("Java","*.exe"),("所有文件","*")]) if file else filedialog.askdirectory(parent=self,title="选择目录",initialdir=self.values[key].get() or None)
@@ -417,9 +557,13 @@ class Window(ctk.CTk):
             self.launching=False;self.start.configure(state="normal",text="离线启动   →");self.game_state.configure(text="启动未完成");self.note(message,True)
         custom_uuid=self.values['uuid'].get().strip()
         mode=self.values['java_mode'].get()
+        account=self.values['game_account'].get()
         def start():
+            from .shared_session import assets
+            self.check_game_identity({'game_account':account,'name':name,'uuid':custom_uuid})
+            auth=self.game_accounts.refresh(account,name,custom_uuid) if account else None
             selected=self.resolve_java(root,version,java,mode)
-            return launch(root,version,selected,name,run or None,memory,custom_uuid=custom_uuid),selected
+            return launch(root,version,selected,name,run or None,memory,custom_uuid=custom_uuid,game_auth=auth,authlib_jar=assets()/'authlib-injector.jar' if auth else None),selected
         def done(result):
             process,selected=result
             if root==self.values['root'].get() and version==self.values['version'].get():
@@ -437,6 +581,7 @@ class Window(ctk.CTk):
             self.start.configure(state="disabled" if self.shared else "normal",text="离线启动   →")
             self.game_state.configure(text="游戏已结束")
             self.note(f"游戏进程结束，返回码 {code}；详细日志在运行目录 .aetherloom/logs")
+            self.refresh_worlds()
         self.after(1000,self.poll_game)
 
     @staticmethod
@@ -536,17 +681,22 @@ class Window(ctk.CTk):
         from .cloud import API
         self.task(lambda:API(url,token)('/api/rooms'),done,failed)
 
-    def create_room(self,existing=None):
+    def create_room(self,existing=None,world_path=None):
         if self.transfer_active or self.shared or self.launching or (self.process and self.process.poll() is None):self.note('请先完成当前同步或保存退出游戏',True);return
         binding=self.current_binding()
         if not binding:return
-        selected=filedialog.askdirectory(parent=self,title='选择要发布的世界（包含level.dat）',initialdir=str(Path(binding['run'])/'saves'))
+        selected=world_path or self.world_choices.get(self.world_menu.get(),{}).get('path') or filedialog.askdirectory(parent=self,title='选择要发布的世界（包含level.dat）',initialdir=str(Path(binding['run'])/'saves'))
         if not selected:return
         world=Path(selected).resolve()
         if (world/'.aetherloom/pending-session.json').exists():self.note('此世界有未处理的Host会话，请先恢复，禁止重新发布覆盖',True);return
         if not (world/'level.dat').is_file() or world.parent!=Path(binding['run']).resolve()/'saves':
             self.note('请选择当前运行目录 saves 下包含 level.dat 的世界目录',True);return
         binding['world']=str(world)
+        from .worlds import level_info
+        try:
+            metadata=level_info(world/'level.dat');expected=describe(binding['root'],binding['version'])['minecraft']
+            if metadata['game_version']!=expected:raise ValueError('存档版本 '+metadata['game_version']+' 与游戏 '+expected+' 不同，请先在个人模式核对并保存为目标版本')
+        except (OSError,ValueError,KeyError) as error:self.note('存档检查失败：'+str(error),True);return
         name=existing.get('name') if existing else ctk.CTkInputDialog(text='共享房间名称',title='发布共同世界').get_input()
         if not name:return
         from .cloud import API,CloudWorld,LeaseGuard
@@ -555,12 +705,15 @@ class Window(ctk.CTk):
         def progress(state):
             self.events.put((lambda value:self.transfer_status(value),dict(state,operation='publish'),'notification'))
         def publish():
+            if binding.get('game_account'):self.game_accounts.refresh(binding['game_account'],binding['name'],binding['uuid'])
             binding['java']=self.resolve_java(binding['root'],binding['version'],binding['java'],binding.get('java_mode','manual'))
+            environment=describe(binding['root'],binding['version'])
+            if binding.get('game_account'):environment['authentication']='littleskin'
             if existing:
                 if existing.get('head'):raise ValueError('已有权威存档，请使用恢复候选审批，不能直接覆盖')
                 room=existing['id']
-                api('/api/rooms/'+room,dict(name=name,environment=encode(describe(binding['root'],binding['version'])),world=world.name),method='PATCH')
-            else:room=api('/api/rooms',dict(name=name,environment=encode(describe(binding['root'],binding['version'])),world=world.name))['id']
+                api('/api/rooms/'+room,dict(name=name,environment=encode(environment),world=world.name),method='PATCH')
+            else:room=api('/api/rooms',dict(name=name,environment=encode(environment),world=world.name))['id']
             self.events.put((lambda _:self.note('正在发布 '+name+'，请勿打开此世界'),None,'notification'))
             lease=api('/api/rooms/'+room+'/claim',{})
             guard=LeaseGuard(api,room,lease)
@@ -582,18 +735,22 @@ class Window(ctk.CTk):
         self.task(publish,done,failed)
 
     def current_binding(self):
-        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid','java_mode','control_backend')}
+        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid','java_mode','control_backend','game_account')}
         try:game_uuid(b['name'],b['uuid'])
         except ValueError as e:self.note(str(e),True);return None
         if not b['root'] or (not b['java'] and b['java_mode']=='manual') or b['version']=='尚未选择':
             self.note('先在本地游戏中定位游戏目录、版本和Java',True);self.show('instance');return None
         b['run']=b['run'] or b['root']
+        try:self.check_game_identity(b)
+        except ValueError as error:self.note(str(error),True);return None
         return b
 
     def bind_room(self,room):
         b=self.current_binding()
         if not b:return
-        try:validate(describe(b['root'],b['version']),room.get('environment'))
+        try:
+            validate(describe(b['root'],b['version']),room.get('environment'),backend=b.get('control_backend','bridge'))
+            validate_account(b,room.get('environment'))
         except (ValueError,OSError,KeyError) as e:self.note(str(e),True);return
         if not messagebox.askyesno('绑定共享房间',f"将当前本地版本 {b['version']} 绑定到房间 {room.get('name') or room['id']}？\n请确保版本、加载器和Mods与房间环境一致。\n作为Host时会将云端存档校验下载到专用世界目录。",parent=self):return
         target=Path(b['run'])/'saves'/('Aetherloom-'+room['id'])
@@ -610,12 +767,23 @@ class Window(ctk.CTk):
             self.cloud_task('/api/rooms/'+room['id'],done,method='DELETE')
 
     def manage_room(self,room):
-        dialog=ctk.CTkToplevel(self);dialog.title('管理共享房间');dialog.geometry('520x420');dialog.configure(fg_color=BG);dialog.transient(self)
+        dialog=ctk.CTkToplevel(self);dialog.title('管理共享房间');dialog.geometry('520x540');dialog.configure(fg_color=BG);dialog.transient(self)
         self.label(dialog,room.get('name') or room['id'],19,bold=True).pack(anchor='w',padx=24,pady=(24,12))
         name=ctk.CTkEntry(dialog,height=40,fg_color=CARD,border_color=BORDER);name.insert(0,room.get('name') or room['id']);name.pack(fill='x',padx=24,pady=8)
         mode=ctk.CTkOptionMenu(dialog,values=['AUTO','RELAY','DIRECT'],fg_color=CARD,button_color=PRIMARY,height=38);mode.set(room.get('mode') or 'AUTO');mode.pack(fill='x',padx=24,pady=8)
+        login_mode=ctk.CTkOptionMenu(dialog,values=['离线游戏身份','LittleSkin外置登录'],fg_color=CARD,button_color=PRIMARY,height=38)
+        login_mode.set('LittleSkin外置登录' if authentication(room.get('environment'))=='littleskin' else '离线游戏身份');login_mode.pack(fill='x',padx=24,pady=8)
         def saved(_):dialog.destroy();self.rooms();self.note('房间配置已更新')
-        self.button(dialog,'保存名称和连接策略',lambda:self.cloud_task('/api/rooms/'+room['id'],saved,{'name':name.get(),'mode':mode.get()},method='PATCH'),True,width=220).pack(anchor='w',padx=24,pady=8)
+        def save_room():
+            body={'name':name.get(),'mode':mode.get()}
+            selected='littleskin' if login_mode.get()=='LittleSkin外置登录' else 'offline'
+            if selected!=authentication(room.get('environment')):
+                if not messagebox.askyesno('变更游戏身份模式','必须先正常结束Host。所有成员需要使用对应账号类型并重新绑定；旧离线UUID与LittleSkin角色UUID可能不同，背包不会自动合并。确认转换？',parent=dialog):return
+                environment=decode(room.get('environment'))
+                if environment is None:self.note('请先补全房间游戏环境声明',True);return
+                environment['authentication']=selected;body['environment']=encode(environment)
+            self.cloud_task('/api/rooms/'+room['id'],saved,body,method='PATCH')
+        self.button(dialog,'保存名称、连接和账号模式',save_room,True,width=240).pack(anchor='w',padx=24,pady=8)
         self.button(dialog,'审阅并批准恢复候选',lambda:self.review_recovery(room),width=220).pack(anchor='w',padx=24,pady=8)
         if room['owner']==self.cloud_user or self.cloud_role=='root':
             owner=ctk.CTkOptionMenu(dialog,values=[room['owner']],height=38,fg_color=CARD,button_color=PRIMARY);owner.pack(fill='x',padx=24,pady=8)
@@ -742,9 +910,12 @@ class Window(ctk.CTk):
                 else:self.note(value)
             self.events.put((apply,None,'notification'))
         self.selected_room=room['id'];self.save()
-        self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']]),notify,recovery)
+        self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']]),notify,recovery,game_accounts=self.game_accounts)
         session=self.shared
         self.network_rows.clear()
+        self.network_states.clear()
+        for key in ('path','ping','peer_ping','speed','traffic','local_links'):self.runtime_values[key].configure(text='—')
+        self.start_nat_probe()
         for widget in self.network_list.winfo_children():widget.destroy()
         self.network_empty=self.label(self.network_list,'正在准备会话；连接流在玩家实际接入后出现。',12,MUTED)
         self.network_empty.pack(anchor='w',padx=16,pady=16)
@@ -764,7 +935,7 @@ class Window(ctk.CTk):
 
     def remember_profile(self):
         if self.profile_key:
-            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid','java_mode','control_backend')}
+            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid','java_mode','control_backend','game_account')}
 
     def select_version(self,save=True):
         self.remember_profile()
@@ -773,14 +944,16 @@ class Window(ctk.CTk):
         profile=self.profiles.get(self.profile_key)
         if profile:
             self.values['uuid'].set(profile.get('uuid',''))
-            self.values['java_mode'].set(profile.get('java_mode','auto'));self.values['control_backend'].set(profile.get('control_backend','bridge'))
+            self.values['java_mode'].set(profile.get('java_mode','auto'));self.values['control_backend'].set(profile.get('control_backend','bridge'));self.values['game_account'].set(profile.get('game_account',''))
             for key,value in profile.items():
                 if key in self.values:self.values[key].set(value)
         else:
             if previous and previous!=self.profile_key:
-                self.values['uuid'].set('');self.values['java_mode'].set('auto');self.values['control_backend'].set('bridge')
+                self.values['uuid'].set('');self.values['java_mode'].set('auto');self.values['control_backend'].set('bridge');self.values['game_account'].set('')
             if previous and previous!=self.profile_key or self.values['run'].get()==self.auto_run:self.values['run'].set('')
             self.suggest_run()
+        self.refresh_game_accounts()
+        self.maybe_refresh_worlds()
         self.detect_java(save=save)
         self.refresh_summary()
 
@@ -891,6 +1064,7 @@ class Window(ctk.CTk):
         self.play_room(room)
 
     def auto_refresh(self):
+        if self.page=='network':self.start_nat_probe()
         if self.token and not self.login_busy:self.rooms()
         self.after((5000 if self.page in ('cloud','home') else 15000)*2**self.refresh_failures,self.auto_refresh)
 
@@ -939,21 +1113,50 @@ class Window(ctk.CTk):
         details+=f"\n代次：{state.get('epoch') if state.get('epoch') is not None else '待确认'} · LAN端口：{state.get('lan_port') or '尚未就绪'} · 已就绪对端：{state.get('players',0)}"
         if state.get('message'):details+='\n'+safe(state['message'])
         self.network_summary.configure(text=details,text_color='#F0AF9C' if state.get('phase')=='failed' else TEXT)
+        self.runtime_values['state'].configure(text=names.get(state.get('phase'),state.get('phase','未启动')))
+        self.runtime_values['role'].configure(text=state.get('role','待确认'))
+        self.runtime_values['room'].configure(text=item.get('name',room) or '未选择')
+        self.runtime_values['players'].configure(text=str(state['world_players']) if state.get('world_players') is not None else '等待游戏上报')
+        self.runtime_values['room_members'].configure(text='未提供完整在线心跳；已就绪对端 '+str(state.get('players',0)))
+        if state.get('phase') in ('failed','ended','complete'):
+            self.runtime_values['speed'].configure(text='↑ 0 B/s · ↓ 0 B/s');self.runtime_values['local_links'].configure(text='0')
         event('session.state',**{key:state[key] for key in ('room','role','phase','mode','epoch','players','message') if key in state})
         if self.transfer_operation=='online' and state.get('phase') in ('ready','active'):
             self.finish_transfer(True,'在线会话已就绪')
 
     def build_network(self):
         p=self.pages['network']
+        self.nat_busy=False;self.nat_updated=0
+        self.network_states={}
         self.heading(p,'联机状态','显示实际流状态、P2P 打洞与中继回退；控制通道不等于游戏直连。')
         self.network_summary=self.label(p,'尚未启动在线会话。点击在线启动后，将持续显示角色、阶段和LAN状态。',13,MUTED,wraplength=690,justify='left')
         self.network_summary.pack(fill='x',pady=(0,14))
-        self.network_list=ctk.CTkScrollableFrame(p,fg_color=CARD)
-        self.network_list.pack(fill='both',expand=True)
+        content=ctk.CTkScrollableFrame(p,fg_color='transparent');content.pack(fill='both',expand=True)
+        card=self.card(content);card.pack(fill='x',pady=(0,12));card.grid_columnconfigure(1,weight=1)
+        self.runtime_values={}
+        titles=[('state','运行状态'),('role','身份'),('path','通路'),('nat','NAT 类型'),('inbound','入站策略'),('punch','打洞进度'),('room','房间'),('room_members','房间内在线'),('players','已加入世界'),('local_links','本地连接'),('ping','中转延迟'),('peer_ping','对端延迟'),('speed','实时速度'),('traffic','累计流量'),('public','公网映射'),('scope','测量范围')]
+        for index,(key,title) in enumerate(titles):
+            self.label(card,title,12,MUTED).grid(row=index,column=0,sticky='nw',padx=(16,22),pady=5)
+            label=self.label(card,{'state':'未启动','nat':'未检测','inbound':'入站未测','punch':'尚未尝试','scope':'NAT诊断独立于游戏套接字，不替代实际直连验证'}.get(key,'—'),12,TEXT,wraplength=520,justify='left')
+            label.grid(row=index,column=1,sticky='w',padx=(0,16),pady=5);self.runtime_values[key]=label
+        self.network_list=ctk.CTkFrame(content,fg_color=CARD);self.network_list.pack(fill='x',expand=True)
         self.network_empty=self.label(self.network_list,'尚无连接流。Host等待玩家时无需建立到自身的隧道。',13,MUTED)
         self.network_empty.pack(anchor='w',padx=16,pady=16)
 
     def network_status(self,state):
+        if state.get('channel')=='metrics':
+            self.runtime_values['speed'].configure(text='↑ '+human_bytes(state.get('speed_up',0))+'/s · ↓ '+human_bytes(state.get('speed_down',0))+'/s')
+            self.runtime_values['traffic'].configure(text='↑ '+human_bytes(state.get('bytes_up',0))+' · ↓ '+human_bytes(state.get('bytes_down',0))+'（载荷，含重传）')
+            self.runtime_values['local_links'].configure(text=str(state.get('local_links',0)));return
+        if state.get('session_id'):
+            self.network_states[state['session_id']]=state
+        active=[s for s in self.network_states.values() if s.get('channel')=='data' and s.get('switch_phase')!='ended']
+        paths={s.get('active_path') for s in active}
+        self.runtime_values['path'].configure(text=' / '.join({'relay':'中继','direct':'P2P直连','reconnecting':'重连中','none':'已关闭'}.get(path,str(path)) for path in sorted(p for p in paths if p)) or '等待连接')
+        if state.get('stage'):self.runtime_values['punch'].configure(text=state['stage'])
+        for source,key in (('relay_rtt_ms','ping'),('direct_rtt_ms','peer_ping')):
+            value=state.get(source)
+            if value is not None:self.runtime_values[key].configure(text=f'{value:.1f} ms')
         if self.network_empty.winfo_exists():self.network_empty.pack_forget()
         key=state.get('session_id','network')
         display={k:state[k] for k in ('peer','channel','mode','active_path','relay_ready','direct_ready','switch_phase','last_reason','relay_rtt_ms','direct_rtt_ms','direct_endpoint','attempt','stage') if k in state}
@@ -963,6 +1166,20 @@ class Window(ctk.CTk):
             row.pack(fill='x',padx=16,pady=10);self.network_rows[key]=row
         titles={'peer':'对端','channel':'通道','mode':'策略','active_path':'当前路径','relay_ready':'中继就绪','direct_ready':'直连验证','switch_phase':'迁移阶段','last_reason':'原因','relay_rtt_ms':'中继 RTT / ms','direct_rtt_ms':'直连 RTT / ms','direct_endpoint':'直连端点','attempt':'打洞轮次','stage':'打洞进度'}
         self.network_rows[key].configure(text='流 '+str(key)[:12]+'\n'+'  ·  '.join(titles[k]+'：'+str(v) for k,v in display.items()))
+
+    def start_nat_probe(self):
+        if self.nat_busy or self.nat_updated and time.monotonic()-self.nat_updated<300:return
+        self.nat_busy=True
+        self.runtime_values['nat'].configure(text='测量 NAT 类型中…');self.runtime_values['inbound'].configure(text='测量入站策略中…')
+        def apply(result):
+            self.nat_busy=False;self.nat_updated=time.monotonic()
+            for key in ('nat','inbound','public'):self.runtime_values[key].configure(text=result.get(key,'未测出'))
+            self.runtime_values['scope'].configure(text=result.get('detail','独立诊断套接字'))
+        def run():
+            try:result=probe_nat()
+            except Exception as error:result={'nat':'未知（检测失败）','inbound':'入站未测','public':'未测出','detail':'诊断失败：'+type(error).__name__+'；不影响中继'}
+            self.events.put((apply,result,'notification'))
+        threading.Thread(target=run,name='Aetherloom NAT diagnostics',daemon=True).start()
 
     def server_status(self):
         def done(r):

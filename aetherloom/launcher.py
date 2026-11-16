@@ -94,14 +94,20 @@ def game_uuid(name, custom_uuid=None):
         raise LaunchError('UUID 格式无效：请填写32位十六进制或带连字符的标准UUID；不能全部为零') from None
 
 
-def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=None):
+def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=None,game_auth=None):
     root, java = Path(root).resolve(), Path(java).resolve()
     run = Path(run_dir or root).resolve()
     if not root.is_dir() or not run.is_dir():
         raise LaunchError("Game root and run directory must already exist")
-    if not re.fullmatch("[A-Za-z0-9_]{1,16}", name):
+    if game_auth:
+        from .game_accounts import profile
+        profile({'name':name,'id':game_auth.uuid})
+    elif not re.fullmatch("[A-Za-z0-9_]{1,16}", name):
         raise LaunchError("Invalid offline name")
     identity=game_uuid(name,custom_uuid)
+    if game_auth:
+        if not custom_uuid:identity=uuid.UUID(game_auth.uuid).hex
+        if name!=game_auth.name or identity!=uuid.UUID(game_auth.uuid).hex:raise LaunchError('LittleSkin角色名称/UUID与当前配置不一致，请重新选择角色或绑定')
     if not 512 <= memory <= 65536:
         raise LaunchError("Invalid memory limit")
     m = manifest(root, version)
@@ -162,6 +168,8 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
         classpath=os.pathsep.join(cp), classpath_separator=os.pathsep,
         library_directory=libraries_java, libraries_directory=libraries_java,
         primary_jar=primary_java, primary_jar_name=Path(primary_java).name, file_separator=os.sep)
+    if game_auth:
+        variables.update(auth_access_token=game_auth.access_token,auth_session=game_auth.access_token,user_type='mojang')
     def expand(s):
         def replacement(x):
             if x[1] not in variables:
@@ -196,8 +204,8 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
                 target.write_bytes(z.read(entry))
     return [str(java), f"-Xmx{memory}M", *jvm, m["mainClass"], *game], run
 
-def launch(*args, quick_play=None, bridge_file=None, agent_jar=None, agent_config=None, before_start=None, managed=False, **kwargs):
-    command, run = prepare(*args, **kwargs)
+def launch(*args, quick_play=None, bridge_file=None, agent_jar=None, agent_config=None, before_start=None, managed=False, game_auth=None,authlib_jar=None, **kwargs):
+    command, run = prepare(*args, game_auth=game_auth,**kwargs)
     environment=None
     if agent_jar or agent_config:
         if not agent_jar or not agent_config or not Path(agent_jar).is_file() or not Path(agent_config).is_file():raise LaunchError('Incomplete agent resources')
@@ -211,11 +219,23 @@ def launch(*args, quick_play=None, bridge_file=None, agent_jar=None, agent_confi
         command.extend(['--quickPlayPath',java_path(run/'.aetherloom/quickplay.json'),'--quickPlay'+mode,value])
     if bridge_file:
         environment=dict(os.environ,AETHERLOOM_BRIDGE_FILE=str(bridge_file))
+    if game_auth:
+        import base64
+        if not authlib_jar or not Path(authlib_jar).is_file():raise LaunchError('交付包缺少外置登录组件')
+        command[1:1]=['-javaagent:'+java_path(Path(authlib_jar).resolve())+'='+game_auth.issuer,
+                      '-Dauthlibinjector.yggdrasil.prefetched='+base64.b64encode(json.dumps(game_auth.metadata).encode()).decode('ascii')]
     if bridge_file or managed:
         command.insert(1,'-Dsharedplayerdata.disable=true')
     logs = inside(run, '.aetherloom/logs')
     logs.mkdir(parents=True, exist_ok=True)
     if before_start:before_start()
+    if game_auth:
+        from .diagnostics import event
+        from .process_log import collect
+        from .runtime import hidden_process
+        event('game.spawn',mode='online' if managed else 'local',run=run,argc=len(command),game_account='littleskin')
+        process=subprocess.Popen(command,cwd=run,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,env=environment,**hidden_process())
+        return collect(process,logs/('game-'+uuid.uuid4().hex+'.log'),[game_auth.access_token])
     with (logs / ('game-' + uuid.uuid4().hex + '.log')).open('wb') as output:
         from .runtime import hidden_process
         from .diagnostics import event

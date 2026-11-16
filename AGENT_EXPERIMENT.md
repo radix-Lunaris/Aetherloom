@@ -34,12 +34,27 @@ Unsupported combinations fail closed; manual mode never bypasses save/identity g
   session failed and prevents a later save event from being accepted as success.
 - Windows/Linux Java8/11/17/21/25 CI tests check bootstrap only. Full-game matrix,
   20 handoffs per combination, fault/performance certification remain pending.
-- No stable promotion: Agent remains explicitly opt-in and exact environment
-  validation stays unchanged. The original Bridge sources/repository remain intact.
+- No stable promotion: Agent remains explicitly opt-in. The original Bridge
+  repository remains the fallback and has its own versioned source pin.
 - The separate playerdata helper currently requires Java17. A compatible Agent
   alone does not make Java8/11 Minecraft environments eligible for full Hop.
 
 ## Rollback
+
+v0.4.0a4 extends the Agent to Minecraft 1.21.1 / Forge52 (tested52.1.16,
+Java21). Real offline and signed local Yggdrasil two-process tests passed
+automatic LAN, repeat custom-UUID inventory/XP, Player no-upload and Host final
+save/exit. Forge52 configuration tasks differ from older negotiation events;
+offline client profiles must align after its earlier login packet. External
+verified profiles are never rewritten. QuickPlay registration includes a
+selected-world readiness recovery to handle already-started servers.
+
+Room matching uses exact Minecraft version, loader type and Forge major;
+it no longer pins a Forge patch. Matching does not certify arbitrary Mod packs.
+Fabric, NeoForge and other Minecraft releases remain unsupported for automatic
+Hop until their complete lifecycle/identity adapters pass. Personal launching
+has no such adapter restriction. Java bootstrap CI is still distinct from
+full-game compatibility.
 
 Stable dev and v0.3.0 remain at the baseline. Disable the experimental control
 option and rebind, or replace the EXE with v0.3.0. Never overwrite an interrupted

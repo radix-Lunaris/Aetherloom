@@ -24,6 +24,9 @@ class AgentControlTests(unittest.TestCase):
                 self.assertFalse(control.ready.is_set())
                 self.assertEqual(send('capabilities',protocol=1,component='agent',capabilities=list(CAPABILITIES)),200)
                 self.assertEqual(send('ready'),200)
+                self.assertEqual(send('stats',players=2),200);self.assertEqual(control.world_players,2)
+                for count in (-1,True,'2',10001):
+                    with self.assertRaises(urllib.error.HTTPError):send('stats',players=count)
                 self.assertEqual(send('saved'),200);self.assertTrue(control.saved.is_set())
                 self.assertEqual(send('error'),200)
                 for event in ('saved','ready'):

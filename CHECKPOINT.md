@@ -1,5 +1,33 @@
 # 实施检查点
 
+## 2026-11-17 当前验证进度
+- 最终61项自动化回归通过（50.373秒），桌面smoke及实际状态页布局检查通过；等待来源提交CI后公开a4候选版。
+- 最终真实双进程：1.21.1／Forge52.1.16 Agent 的离线和外置认证均通过首次/重复入服、自定义UUID 23级2绿宝石保持、Player不上传、Host最终提交和游戏关闭。1.20.1／Forge47.4.22 的最终Agent和Bridge0.1.1外置认证复测均通过；每次两次join/hasJoined及签名皮肤PNG实际请求通过，未使用用户真实LittleSkin账号。
+- 独立Bridge来源已更新为58b988891d2f96101b810ecfc0984aaeb2b0dbd5（dev），包含人数监测与外置身份协议；本地离线构建成功，待对应CI后发布v0.1.1。应用a4统一构建/发行中，不修改稳定dev/main或生产ECS。
+- 升级时将已识别旧版Bridge保留到游戏目录.aetherloom/disabled-mods，防止0.1.0/0.1.1双Mod ID；不删除原文件。新增幂等升级/备份测试。
+- 新增选定实例的自动存档列表：参考 MCsaves-sync scanner/level_info 的字段与范围，原创有界 NBT 读取；只读取所选运行目录 saves 的 level.dat，不计算世界大小、不读 region。运行游戏时暂停探测。
+- 对照 CraftLink 补齐运行状态、角色、路径、NAT、入站策略、打洞、房间、人数、本地连接、RTT、速度与累计流量；实际游戏人数由 Bridge/Agent 每两秒报告，流量按传输载荷计数。没有 ECS 全员在线心跳则明确显示未提供，不编造在线人数。
+- STUN 诊断移植自 CraftLink 8178a3df，保留 GPL 和哈希；独立诊断套接字不替代实际 P2P 验证。本机实测 6.42 秒完成、两个端点响应、锥形映射、过滤 unknown；界面显示入站未测。
+- 60 项回归通过，含存档截断/压缩上限/NBT深度、选定目录范围、CraftLink NAT 展示语义、真实 TCP/UDP 流量、游戏人数校验。桌面导航和状态卡检查通过。
+- Agent 1.21.1/Forge52 已通过新世界 LAN/保存/锁释放；已有世界 QuickPlay 暴露事件注册竞态，增加加载屏障与选定世界就绪恢复后通过。双进程进一步暴露离线配置阶段 UUID 报文早于 Forge 身份屏障，正在验证客户端身份对齐，不将未通过场景列为已验收。
+- LittleSkin 已用本地 RSA 签名 Yggdrasil 测试端与真实 1.20.1 双进程验证；尚无用户真实 LittleSkin 登录/皮肤验收。当前工作未发布，生产 ECS 未部署。
+
+## 追加需求：广版本、存档检测、CraftLink状态页（进行中）
+- 用户要求去除Forge补丁号精确限制；已将房间匹配改为Minecraft版本+加载器代际（Forge47.*同族），Agent增加1.21.1/Forge52官方名接口适配，尚待真实游戏验收。个人启动原本不受1.20.1限制；不把未验证环境伪装已支持。
+- 用户要求参考MCsaves-sync自动检测存档。已阅读client/core/scanner.py的list_saves和nbt.level_info；新增独立有界只读NBT摘要和当前运行目录saves平级枚举，不扫描区块/磁盘。GUI列表在切换实例、新目录出现、游戏退出时自动更新，受管游戏中暂停。
+- 用户要求照搬CraftLink联机状态字段。已阅读GUI运行状态卡及NAT展示规则，固定引入原STUN探测算法；仅把枚举导入改为最小适配，不改探测/分类逻辑。NAT1/2合并、入站宽松/中等/严格/未测与上游一致，界面接线及测试进行中。
+- LittleSkin当前代码默认Bridge和Agent的本地真实双进程认证/皮肤首次与重复入服已通过；UUID查询改为完整已验证身份以支持中文角色、兼容旧ECS隧道标签。一次重复入服曾报告控制错误，后续复测通过；保留记录，不宣称所有网络组合已验收。
+- 本轮尚未发行应用a4；独立Bridge0.1.1来源为232b215be5f0f808fe44a35f21ae5bdc58c613bc，已推dev且CI成功。待追加任务测试完成后统一单EXE构建与Prerelease，不部署ECS。
+
+## 2026-11-16 LittleSkin外置登录实施中
+- 使用官方LittleSkin Yggdrasil端点，已以无凭据请求确认authenticate仍可用；不读取其他启动器缓存。新增游戏账号与角色选择，密码不保存，Windows DPAPI保存令牌，启动前刷新授权。
+- 内嵌未经修改authlib-injector1.2.8（官方build56，SHA256固定），保留AGPLv3+AUTHLIB-INJECTOR例外及依赖许可，客户端无需额外JAR/ZIP或Java。
+- 房间认证模式放入现有environment声明，避免数据库变更；旧房间默认offline。LittleSkin房间必须所有成员选择LittleSkin身份，管理员显式转换且结束Host后才可修改。不能用任意自定义UUID覆盖外置角色。
+- Bridge和Agent在外置房间启用在线会话验证，校验服务端已验证UUID与软件授权对端一致，保留签名皮肤属性，不改写真实外置身份。离线修复逻辑不用于合并外置角色。
+- 55项回归及桌面检查通过。Agent真实双进程本地RSA测试认证服务已通过：join/hasJoined、签名profile及皮肤PNG请求、角色UUID/23级/2绿宝石、退出上传行为。默认Bridge真实认证已通过，最终0.1.1强制新纹理缓存未命中复测中。
+- 未使用真实LittleSkin账号，真实账号登录/实际皮肤由用户在交付GUI验证；不将本地协议测试当成用户授权实测。
+- 独立Bridge dev已同步70498955b1cbe1e49dc31cfc991a22d32ddb4f2f，应用SOURCE固定；本地Forge证书预检异常，已用现有离线缓存构建成功，客户端运行无需Gradle。main、生产ECS均未动。
+
 ## 2026-11-16 整合包 primary_jar_name 热修复
 - 已在用户当前DeceasedCraft版本预检查中复现Unsupported variable: primary_jar_name；另一整合包Construct Technological Innovation也引用该变量。
 - 核对实际版本配置与HMCL公开变量语义，只补本项目参数映射，不导入启动器源码。primary_jar指向最终继承／jar指定的实际客户端文件；primary_jar_name取Java实际classpath使用的路径文件名（含Windows短路径情况），不按界面版本昵称猜测。

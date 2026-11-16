@@ -9,6 +9,7 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Java 8 compatible, no game or third-party linkage in the public agent. */
 public final class Agent {
@@ -20,6 +21,8 @@ public final class Agent {
     static volatile boolean connecting;
     static long joinDeadline;
     static final Set<String> reports=Collections.synchronizedSet(new HashSet<String>());
+    static final AtomicBoolean statsPending=new AtomicBoolean();
+    static long nextStats;
 
     public static void premain(String options,Instrumentation instrumentation) throws Exception {
         if ("selftest".equals(options)) {
@@ -33,7 +36,7 @@ public final class Agent {
         URI endpoint=URI.create(config.getProperty("endpoint"));
         if (!"http".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost()) || endpoint.getUserInfo()!=null)
             throw new IllegalArgumentException("Control must use loopback");
-        if (!"1.20.1-forge".equals(config.getProperty("adapter"))) throw new IllegalArgumentException("Unverified adapter");
+        if (!Arrays.asList("1.20.1-forge","1.21.1-forge").contains(config.getProperty("adapter"))) throw new IllegalArgumentException("Unverified adapter");
         try(InputStream mappings=Agent.class.getResourceAsStream("/forge-1.20.1.properties")) {names.load(mappings);}
         Thread worker=new Thread(()->{
             try {
@@ -45,6 +48,9 @@ public final class Agent {
                 }
                 if(gameLoader==null) throw new IllegalStateException("Game loader discovery timed out");
                 Thread.currentThread().setContextClassLoader(gameLoader);
+                // QuickPlay can construct Minecraft while Forge is still setting
+                // up its event bus. Register only after mod loading completes.
+                while((minecraft()==null || Boolean.TRUE.equals(call(type("net.minecraftforge.client.loading.ClientModLoader"),"isLoading"))) && System.nanoTime()<deadline)Thread.sleep(100);
                 install();
                 while(!finished) {
                     stop=request("",null).contains("\"stop\": true");Thread.sleep(500);
@@ -56,7 +62,7 @@ public final class Agent {
     static Class<?> type(String name) throws Exception {return Class.forName(name,true,gameLoader);}
     static String[] aliases(Class<?> owner,String name) {
         String value=names.getProperty(owner.getName()+"."+name,name);
-        return value.split(",");
+        return (value+","+name).split(",");
     }
     static Object field(Object object,String name) throws Exception {
         Class<?> owner=object instanceof Class?(Class<?>)object:object.getClass();
@@ -109,23 +115,19 @@ public final class Agent {
     static void install() throws Exception {
         Object bus=field(type("net.minecraftforge.common.MinecraftForge"),"EVENT_BUS");
         listen(bus,"net.minecraftforge.event.server.ServerStartedEvent",checked(event->{
-            if(!config.containsKey("join")) {Object server=call(event,"getServer");if(selected(server))pending=server;}
+            if(!config.containsKey("join")) {Object server=call(event,"getServer");boolean selected=selected(server);System.out.println("AETHERLOOM_AGENT_SERVER_STARTED selected="+selected);if(selected)pending=server;}
         }));
         listen(bus,"net.minecraftforge.event.server.ServerStoppedEvent",checked(event->{
             Object server=call(event,"getServer");if(loaded && selected(server)) {loaded=false;emit("saved",0);}
         }));
-        listen(bus,"net.minecraftforge.event.entity.player.PlayerNegotiationEvent",checked(event->{
+        if(modern())listen(bus,"net.minecraftforge.event.network.GatherLoginConfigurationTasksEvent",checked(Agent::configurationIdentity));
+        else listen(bus,"net.minecraftforge.event.entity.player.PlayerNegotiationEvent",checked(event->{
             if(config.containsKey("join") || Boolean.parseBoolean(config.getProperty("inspect")))return;
             // The integrated Host joins via an in-memory connection, not a relay peer.
             if(Boolean.TRUE.equals(call(call(event,"getConnection"),"isMemoryConnection")))return;
             CompletableFuture<Void> result=CompletableFuture.runAsync(()->{
                 try {
-                    Object profile=call(event,"getProfile");String name=(String)call(profile,"getName");
-                    String response=request("/identity/"+URLEncoder.encode(name,"UTF-8"),null);
-                    java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\\"uuid\\\"\\s*:\\s*\\\"([0-9a-fA-F-]{36})\\\"").matcher(response);
-                    if(!match.find())throw new IllegalStateException("Unregistered peer identity");
-                    UUID id=UUID.fromString(match.group(1));Field identity=profile.getClass().getDeclaredField("id");identity.setAccessible(true);identity.set(profile,id);
-                    if(!id.equals(call(profile,"getId")))throw new IllegalStateException("UUID application failed");
+                    verifyIdentity(call(event,"getProfile"));
                 }catch(Throwable error){
                     fail(error);
                     try {call(call(event,"getConnection"),"disconnect",call(type("net.minecraft.network.chat.Component"),"literal","Aetherloom: identity rejected"));}
@@ -136,9 +138,55 @@ public final class Agent {
             // Future completion is part of Forge's negotiation barrier.
             call(event,"enqueueWork",result);
         }));
-        listen(bus,"net.minecraftforge.event.TickEvent$ClientTickEvent",checked(event->{if("END".equals(String.valueOf(field(event,"phase"))))tick();}));
+        listen(bus,modern()?"net.minecraftforge.event.TickEvent$ClientTickEvent$Post":"net.minecraftforge.event.TickEvent$ClientTickEvent",checked(event->{if(modern() || "END".equals(String.valueOf(field(event,"phase"))))tick();}));
         emit("capabilities",0);
-        System.out.println("AETHERLOOM_AGENT_ADAPTER_INSTALLED 1.20.1-forge");
+        System.out.println("AETHERLOOM_AGENT_ADAPTER_INSTALLED "+config.getProperty("adapter"));
+    }
+    static boolean modern() {return "1.21.1-forge".equals(config.getProperty("adapter"));}
+    static void verifyIdentity(Object profile) throws Exception {
+        String name=(String)call(profile,"getName");
+        String lookup="littleskin".equals(config.getProperty("auth_mode"))?"by-uuid/"+call(profile,"getId"):URLEncoder.encode(name,"UTF-8");
+        String response=request("/identity/"+lookup,null);
+        java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\\"uuid\\\"\\s*:\\s*\\\"([0-9a-fA-F-]{36})\\\"").matcher(response);
+        if(!match.find())throw new IllegalStateException("Unregistered peer identity");
+        UUID id=UUID.fromString(match.group(1));
+        if("littleskin".equals(config.getProperty("auth_mode"))) {
+            if(!id.equals(call(profile,"getId")))throw new IllegalStateException("Verified LittleSkin UUID mismatch");
+            return;
+        }
+        Field identity=profile.getClass().getDeclaredField("id");identity.setAccessible(true);identity.set(profile,id);
+        if(!id.equals(call(profile,"getId")))throw new IllegalStateException("UUID application failed");
+    }
+    static void configurationIdentity(Object event) throws Exception {
+        if(config.containsKey("join") || Boolean.parseBoolean(config.getProperty("inspect")))return;
+        Object connection=call(event,"getConnection");
+        if(Boolean.TRUE.equals(call(connection,"isMemoryConnection")))return;
+        Object listener=call(connection,"getPacketListener");
+        Object identity=call(listener,"getOwner");
+        Object taskType=make("net.minecraft.server.network.ConfigurationTask$Type","aetherloom:identity");
+        Object task=java.lang.reflect.Proxy.newProxyInstance(gameLoader,new Class<?>[]{type("net.minecraft.server.network.ConfigurationTask")},(proxy,method,args)->{
+            if(method.getName().equals("type"))return taskType;
+            if(method.getName().equals("toString"))return "Aetherloom identity barrier";
+            if(method.getName().equals("hashCode"))return System.identityHashCode(proxy);
+            if(method.getName().equals("equals"))return proxy==args[0];
+            if(!method.getName().equals("start") || args==null || args.length!=1)throw new UnsupportedOperationException("Unknown configuration task method");
+            Object context=args[0];
+            io.submit(()->{
+                try {
+                    verifyIdentity(identity);
+                    Object server=call(minecraft(),"getSingleplayerServer");
+                    call(server,"execute",(Runnable)()->{
+                        try {if(Boolean.TRUE.equals(call(connection,"isConnected")))call(context,"finish",taskType);}
+                        catch(Throwable error){fail(error);}
+                    });
+                }catch(Throwable error){
+                    fail(error);
+                    try {call(connection,"disconnect",call(type("net.minecraft.network.chat.Component"),"literal","Aetherloom: identity rejected"));}
+                    catch(Throwable ignored) {}
+                }
+            });return null;
+        });
+        call(event,"addTask",task);
     }
     static Object minecraft() throws Exception {return call(type("net.minecraft.client.Minecraft"),"getInstance");}
     static boolean selected(Object server) throws Exception {
@@ -148,10 +196,19 @@ public final class Agent {
     static void leave(Object mc) throws Exception {
         Object level=field(mc,"level");if(level!=null)call(level,"disconnect");
         Object server=call(mc,"getSingleplayerServer");if(server!=null)call(server,"halt",false);
-        call(mc,"clearLevel",make("net.minecraft.client.gui.screens.TitleScreen"));
+        call(mc,modern()?"disconnect":"clearLevel",make("net.minecraft.client.gui.screens.TitleScreen"));
     }
     static void tick() throws Exception {
         Object mc=minecraft(),player=field(mc,"player"),level=field(mc,"level"),server=call(mc,"getSingleplayerServer");
+        // QuickPlay may have started the integrated server before registration.
+        // Recover only the explicitly selected world, never an arbitrary world.
+        if(!config.containsKey("join") && !loaded && pending==null && !stopping && server!=null && player!=null && level!=null && selected(server))pending=server;
+        if(loaded && System.nanoTime()>=nextStats) {
+            nextStats=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);
+            Object connection=call(mc,"getConnection");
+            int count=server!=null?((Number)call(server,"getPlayerCount")).intValue():connection!=null?((Collection<?>)call(connection,"getOnlinePlayers")).size():0;
+            emitStats(count);
+        }
         if(config.containsKey("join")) {
             if(joined && player==null && level==null)finished=true;
             else if(!joined && player!=null && level!=null && server==null) {checkIdentity(player);emit("joined",0);joined=true;loaded=true;}
@@ -163,7 +220,7 @@ public final class Agent {
             pending=null;int port=0;
             if(!Boolean.parseBoolean(config.getProperty("inspect"))) {
                 try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
-                call(server,"setUsesAuthentication",false);
+                call(server,"setUsesAuthentication","littleskin".equals(config.getProperty("auth_mode")));
                 if(!Boolean.TRUE.equals(call(server,"publishServer",call(server,"getDefaultGameType"),false,port)))throw new IllegalStateException("LAN publication failed");
             }
             checkIdentity(player);loaded=true;emit("ready",port);
@@ -172,16 +229,20 @@ public final class Agent {
     }
     static void join(Object mc) throws Exception {
         if(pinger==null && type("net.minecraft.client.gui.screens.TitleScreen").isInstance(field(mc,"screen"))) {
-            target=make("net.minecraft.client.multiplayer.ServerData","Aetherloom",config.getProperty("join"),false);
+            Object serverType=modern()?Enum.valueOf((Class)type("net.minecraft.client.multiplayer.ServerData$Type"),"LAN"):Boolean.FALSE;
+            target=make("net.minecraft.client.multiplayer.ServerData","Aetherloom",config.getProperty("join"),serverType);
             pinger=make("net.minecraft.client.multiplayer.ServerStatusPinger");
-            call(pinger,"pingServer",target,(Runnable)()->{});joinDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
+            if(modern())call(pinger,"pingServer",target,(Runnable)()->{},(Runnable)()->{});
+            else call(pinger,"pingServer",target,(Runnable)()->{});
+            joinDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(60);
         }
         if(pinger!=null) {
             call(pinger,"tick");
             if(((Number)field(target,"ping")).longValue()>=0 && field(target,"forgeData")!=null) {
                 call(pinger,"removeAll");pinger=null;connecting=true;
                 Object address=call(type("net.minecraft.client.multiplayer.resolver.ServerAddress"),"parseString",config.getProperty("join"));
-                call(type("net.minecraft.client.gui.screens.ConnectScreen"),"startConnecting",make("net.minecraft.client.gui.screens.TitleScreen"),mc,address,target,false);
+                if(modern())call(type("net.minecraft.client.gui.screens.ConnectScreen"),"startConnecting",make("net.minecraft.client.gui.screens.TitleScreen"),mc,address,target,false,null);
+                else call(type("net.minecraft.client.gui.screens.ConnectScreen"),"startConnecting",make("net.minecraft.client.gui.screens.TitleScreen"),mc,address,target,false);
             } else if(System.nanoTime()>joinDeadline)throw new IllegalStateException("Forge discovery timeout");
         }
     }
@@ -192,12 +253,32 @@ public final class Agent {
     }
     static void checkIdentity(Object player) throws Exception {
         UUID expected=UUID.fromString(config.getProperty("identity"));
+        if(modern() && config.containsKey("join") && !"littleskin".equals(config.getProperty("auth_mode")) && !expected.equals(call(player,"getUUID"))) {
+            // Forge 52's configuration barrier runs after the login profile
+            // packet. The Host validates and applies the member UUID before
+            // loading player data; align the offline client's earlier profile.
+            Object profile=call(player,"getGameProfile");
+            UUID vanilla=UUID.nameUUIDFromBytes(("OfflinePlayer:"+call(profile,"getName")).getBytes(StandardCharsets.UTF_8));
+            if(!vanilla.equals(call(player,"getUUID")))throw new IllegalStateException("Unexpected offline login identity");
+            Field id=profile.getClass().getDeclaredField("id");id.setAccessible(true);id.set(profile,expected);
+            Object connection=call(minecraft(),"getConnection");
+            Object localProfile=call(connection,"getLocalGameProfile");id.set(localProfile,expected);
+            call(player,"setUUID",expected);
+            System.out.println("AETHERLOOM_AGENT_OFFLINE_CONFIGURATION_IDENTITY_ALIGNED");
+        }
         if(!expected.equals(call(player,"getUUID")))throw new IllegalStateException("Actual player UUID differs from managed identity");
     }
     static void emit(String event,int port) {
         // Never block a render/server thread on HTTP.
         io.submit(()->{try{request("","{\"event\":"+quote(event)+",\"port\":"+port+",\"world\":"+quote(config.getProperty("world"))+",\"uuid\":"+quote(config.getProperty("identity"))+",\"protocol\":1,\"component\":\"agent\",\"capabilities\":[\"world\",\"lan\",\"join\",\"identity\",\"saved\",\"exit\"]}");if("saved".equals(event))finished=true;}
             catch(Throwable error){fail(error);}});
+    }
+    static void emitStats(int count) {
+        if(!statsPending.compareAndSet(false,true))return;
+        io.submit(()->{
+            try {request("","{\"event\":\"stats\",\"players\":"+count+",\"world\":"+quote(config.getProperty("world"))+",\"uuid\":"+quote(config.getProperty("identity"))+"}");}
+            catch(Exception ignored) {} finally {statsPending.set(false);}
+        });
     }
     static String request(String suffix,String body) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(config.getProperty("endpoint")+suffix).openConnection();
@@ -214,6 +295,7 @@ public final class Agent {
         }finally{connection.disconnect();}
     }
     static void fail(Throwable error) {
+        while((error instanceof InvocationTargetException || error instanceof CompletionException) && error.getCause()!=null)error=error.getCause();
         stop=true;String message=error.getClass().getName()+": "+String.valueOf(error.getMessage());
         if(reports.add(message)) {System.err.println("AETHERLOOM_AGENT_FAILED "+message);if(config.containsKey("endpoint"))io.submit(()->{try{request("","{\"event\":\"error\",\"port\":0,\"world\":"+quote(config.getProperty("world"))+",\"uuid\":"+quote(config.getProperty("identity"))+"}");}catch(Exception ignored){}});}
     }

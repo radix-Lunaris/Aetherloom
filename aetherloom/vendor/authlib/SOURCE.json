@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/yushijinhun/authlib-injector",
+  "commit": "5437f5b465ee3f5be0a1e5e1ae3c50978114f6fb",
+  "version": "1.2.8",
+  "artifact_url": "https://authlib-injector.yushi.moe/artifact/56/authlib-injector-1.2.8.jar",
+  "sha256": "9c7f4343e6c82034958ffb48c14a2cb0c85928be7283103ce17da00c6d5a7b10",
+  "license": "AGPL-3.0-or-later with AUTHLIB-INJECTOR exception",
+  "modified": false
+}

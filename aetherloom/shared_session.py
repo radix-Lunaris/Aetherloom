@@ -13,7 +13,7 @@ from .launcher import launch,offline_uuid,game_uuid
 from .network import Network
 from .world_lock import closed_world
 from .runtime import hidden_process
-from .environment import describe,validate
+from .environment import describe,validate,validate_account
 from .game_control import select_backend,agent_config
 
 
@@ -32,10 +32,11 @@ def repair(world,java,identity,saved=False):
 
 
 class SharedSession:
-    def __init__(self,url,token,cache,room,binding,notify,confirm_recovery=False):
+    def __init__(self,url,token,cache,room,binding,notify,confirm_recovery=False,game_accounts=None):
         self.api=API(url,token);self.cloud=CloudWorld(self.api,cache,progress=lambda text:notify('status',text),on_progress=lambda state:notify('progress',state))
         self.room,self.binding,self.notify=room,binding,notify
         self.backend=select_backend(binding)
+        self.game_accounts=game_accounts;self.game_auth=None
         self.confirm_recovery=confirm_recovery;self.process=None;self.stop=False
         self.path_states={};self.data_states={}
         self.session_info={'room':room,'role':'待确认','phase':'created','mode':'AUTO','host':None,'epoch':None,'lan_port':None,'players':0,'message':'尚未开始连接'}
@@ -56,28 +57,59 @@ class SharedSession:
         self.bridge=None;self.guard=None
 
     def state(self,phase,**fields):
+        if phase=='complete':fields['world_players']=0
         self.session_info.update(fields,phase=phase)
         self.notify('session',dict(self.session_info))
+
+    def report_game_stats(self):
+        if self.bridge and self.bridge.world_players is not None and self.bridge.world_players!=self.session_info.get('world_players'):
+            self.state(self.session_info['phase'],world_players=self.bridge.world_players)
 
     def game(self,**kwargs):
         b=self.binding
         if self.backend=='agent':
             kwargs.pop('bridge_file',None)
             kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge))
+        if self.game_auth:kwargs.update(game_auth=self.game_auth,authlib_jar=assets()/'authlib-injector.jar')
         process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),custom_uuid=b.get('uuid'),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
         self.process=process;self.notify('process',process)
         return process
 
     def control(self,*args,**kwargs):
-        return BridgeControl(*args,backend=self.backend,**kwargs)
+        environment=describe(self.binding['root'],self.binding['version'])
+        return BridgeControl(*args,backend=self.backend,auth_mode='littleskin' if self.game_auth else 'offline',adapter=environment['minecraft']+'-'+environment['loader'],**kwargs)
+
+    async def prepare_account(self):
+        if self.binding.get('game_account'):
+            if not self.game_accounts:raise ValueError('缺少LittleSkin账号，请重新登录')
+            b=self.binding
+            self.game_auth=await asyncio.to_thread(self.game_accounts.refresh,b['game_account'],b['name'],b['uuid'])
 
     def install_control(self,run):
         if self.backend=='agent':
             if not (assets()/'aetherloom-agent.jar').is_file():raise ValueError('交付包缺少实验Agent')
             return
-        jar=assets()/'aetherloom-bridge-0.1.0.jar'
+        jar=assets()/'aetherloom-bridge-0.1.1.jar'
         if not jar.is_file():raise ValueError('交付包缺少Bridge')
-        mods=Path(run)/'mods';mods.mkdir(exist_ok=True);shutil.copy2(jar,mods/jar.name)
+        from .launcher import inside
+        import zipfile,tomllib
+        run=Path(run).resolve();mods=inside(run,'mods');mods.mkdir(exist_ok=True)
+        old=inside(run,'mods/aetherloom-bridge-0.1.0.jar')
+        if old.exists():
+            # Preserve the previously installed managed Mod outside Forge's
+            # active directory; two versions with the same Mod ID cannot load.
+            try:
+                with zipfile.ZipFile(old) as archive:
+                    info=archive.getinfo('META-INF/mods.toml')
+                    if info.file_size>65536:raise ValueError('Old Bridge metadata too large')
+                    metadata=tomllib.loads(archive.read(info).decode('utf-8'))
+                if not any(m.get('modId')=='aetherloom_bridge' for m in metadata.get('mods',[])):raise ValueError('Unrecognized old Bridge')
+            except (OSError,ValueError,KeyError,zipfile.BadZipFile) as error:
+                raise ValueError('旧版Bridge无法识别，请手动移出mods后重试') from error
+            backup=inside(run,'.aetherloom/disabled-mods');backup.mkdir(parents=True,exist_ok=True)
+            old.rename(backup/(old.name+'.'+uuid.uuid4().hex+'.disabled'))
+        target=inside(run,'mods/'+jar.name)
+        if not target.is_file() or target.read_bytes()!=jar.read_bytes():shutil.copy2(jar,target)
 
     async def prepare_java(self):
         if self.binding.get('java_mode')=='auto':
@@ -97,12 +129,14 @@ class SharedSession:
             self.state('preflight',message='正在检查本地环境、账号权限和云端权威版本')
             self.notify('status','游戏控制：'+('实验Agent（未承诺广版本支持）' if self.backend=='agent' else '稳定Bridge'))
             await self.prepare_java()
+            await self.prepare_account()
             self.notify('status','正在核验房间权限和权威版本信息')
             items=await asyncio.to_thread(self.api,'/api/rooms')
             room=next((r for r in items if r['id']==self.room),None)
             if not room:raise ValueError('共享房间不存在')
             self.state('preflight',host=room.get('host'),mode=room.get('mode','AUTO'),epoch=room.get('epoch'))
-            validate(describe(self.binding['root'],self.binding['version']),room.get('environment'))
+            validate(describe(self.binding['root'],self.binding['version']),room.get('environment'),backend=self.backend)
+            validate_account(self.binding,room.get('environment'))
             self.install_control(self.binding['run'])
             await asyncio.to_thread(self.api,base+'/join',{})
             head_info=await asyncio.to_thread(self.api,base+'/head')
@@ -111,10 +145,14 @@ class SharedSession:
             if room['host'] and room['expires']>time.time():
                 if room['state']!='ready':raise ValueError('Host正在准备或上传，列表会自动更新，请稍后再在线启动')
                 self.state('connecting',role='Player',message='发现现有Host，正在建立本地代理')
-                port=await self.network.listen(self.room,{'name':self.binding['name'],'uuid':game_uuid(self.binding['name'],self.binding.get('uuid'))})
+                identity=game_uuid(self.binding['name'],self.binding.get('uuid'))
+                # Old ECS versions restrict transport labels to ASCII. Verified
+                # external identities are matched by full UUID, never this label.
+                label='LS'+identity[:14] if self.game_auth else self.binding['name']
+                port=await self.network.listen(self.room,{'name':label,'uuid':identity})
                 self.notify('status','已建立本地联机代理，正在启动加入游戏')
                 b=self.binding
-                jar=assets()/'aetherloom-bridge-0.1.0.jar'
+                jar=assets()/'aetherloom-bridge-0.1.1.jar'
                 if self.backend=='bridge' and not jar.is_file():raise ValueError('交付包缺少Forge联机Bridge')
                 self.bridge=self.control(b['world'],game_uuid(b['name'],b.get('uuid')),join='127.0.0.1:'+str(port),config_dir=Path(b['run'])/'.aetherloom/control')
                 self.state('loading',message='正在启动游戏；等待Forge入服确认')
@@ -129,6 +167,7 @@ class SharedSession:
                 self.notify('status','已自动加入共享世界')
                 checked=0
                 while self.process.poll() is None and not self.stop:
+                    self.report_game_stats()
                     if self.bridge.error:raise ValueError(self.bridge.error)
                     if time.monotonic()-checked>5:
                         await asyncio.to_thread(self.api,base+'/membership')
@@ -144,7 +183,7 @@ class SharedSession:
             b=self.binding;world=Path(b['world']).resolve()
             if (world/'.aetherloom/pending-session.json').exists():
                 raise ValueError('此设备保留未处理的Host会话，请先提交恢复候选或另选绑定目录，禁止覆盖旧进度')
-            bridge_jar=assets()/'aetherloom-bridge-0.1.0.jar'
+            bridge_jar=assets()/'aetherloom-bridge-0.1.1.jar'
             if self.backend=='bridge' and not bridge_jar.is_file():raise ValueError('交付包缺少Forge游戏Bridge，禁止把空房间标记为就绪')
             if world.parent!=(Path(b['run']).resolve()/'saves'):
                 raise ValueError('共享世界必须位于所选运行目录的saves下，请重新绑定')
@@ -181,6 +220,7 @@ class SharedSession:
                 self.state('ready',lan_port=self.bridge.port,message='Host世界与LAN已就绪，等待其他玩家连接；尚无隧道流时不会显示已中继或已直连')
                 self.notify('status','Host已就绪，正在等待其他玩家连接')
                 while not self.bridge.saved.is_set():
+                    self.report_game_stats()
                     if self.bridge.error:raise ValueError(self.bridge.error)
                     self.guard.check()
                     if self.stop:self.bridge.stop=True
@@ -241,6 +281,7 @@ class OfflineInspection(SharedSession):
     async def run(self):
         self.state('inspection',role='离线恢复检查',message='不占Host、不建立LAN或隧道')
         await self.prepare_java()
+        await self.prepare_account()
         source=Path(self.binding['world']).resolve()
         pending=source/'.aetherloom/pending-session.json'
         if not pending.is_file():raise ValueError('此绑定目录没有待恢复的Host会话')
@@ -255,7 +296,7 @@ class OfflineInspection(SharedSession):
                 shutil.copytree(source,world,ignore=shutil.ignore_patterns('.aetherloom','session.lock'))
         await asyncio.to_thread(copy)
         self.notify('status','已保留原始存档；正在打开独立离线检查副本，不开LAN、不占Host')
-        jar=assets()/'aetherloom-bridge-0.1.0.jar'
+        jar=assets()/'aetherloom-bridge-0.1.1.jar'
         if self.backend=='bridge' and not jar.is_file():raise ValueError('缺少游戏Bridge')
         self.install_control(self.binding['run'])
         self.bridge=self.control(world,identity,inspect=True)

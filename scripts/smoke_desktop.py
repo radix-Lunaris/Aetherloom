@@ -20,7 +20,7 @@ class Game:
     def returncode(self):return self.exit_code
     def poll(self):return self.exit_code
 
-with tempfile.TemporaryDirectory() as d:
+with tempfile.TemporaryDirectory() as d,patch('aetherloom.gui.probe_nat',return_value={'nat':'未知（测试未探测）','inbound':'入站未测','public':'未测出','detail':'test fixture'}):
     root=Path(d);version=root/'game/versions/test-forge';version.mkdir(parents=True)
     (version/'test-forge.json').write_text('{"javaVersion":{"majorVersion":17}}')
     ctk.set_appearance_mode('dark')
@@ -117,6 +117,18 @@ with tempfile.TemporaryDirectory() as d:
             with patch('aetherloom.java_download.install_runtime',side_effect=cancelling):
                 window.download_java();window.download_java();wait(window,lambda:window.pending==0)
                 assert not window.java_busy and window.values['java'].get()==installed.path
+        # Game account selection remains independent from software login;
+        # settings store only the account key, never the external token.
+        window.game_accounts.rows['test-littleskin']={'profile':{'name':'SkinPlayer','id':'81f14300fbc14a4688f00d90db478198'},'accessToken':'must-not-enter-settings','clientToken':'client-secret'}
+        window.refresh_game_accounts()
+        skin_label=next(label for label,key in window.game_choices.items() if key=='test-littleskin')
+        with patch('aetherloom.gui.messagebox.askyesno',return_value=True):window.select_game_account(skin_label)
+        assert window.values['name'].get()=='SkinPlayer'
+        assert window.game_uuid_entry.cget('state')=='disabled'
+        assert window.current_binding()['game_account']=='test-littleskin'
+        assert 'must-not-enter-settings' not in window.settings.path.read_text()
+        window.select_game_account('离线游戏账号')
+        assert window.game_uuid_entry.cget('state')=='normal'
         window.begin_transfer('online','准备在线会话')
         window.session_status({'room':'test-room','role':'Host','phase':'ready','mode':'AUTO','epoch':3,'lan_port':25565,'players':0,'message':'等待其他玩家连接'})
         window.show('network');window.update()
@@ -124,6 +136,11 @@ with tempfile.TemporaryDirectory() as d:
         assert '25565' in window.network_summary.cget('text') and '已就绪对端：0' in window.network_summary.cget('text')
         assert window.network_empty.winfo_exists() and window.network_empty.winfo_manager()=='pack'
         assert not window.network_rows and not window.transfer_active
+        window.network_status({'session_id':'fixture','channel':'data','active_path':'direct','relay_ready':True,'direct_ready':True,'switch_phase':'direct','relay_rtt_ms':12.5,'direct_rtt_ms':3.2})
+        window.network_status({'session_id':'metrics','channel':'metrics','bytes_up':2048,'bytes_down':4096,'speed_up':1024,'speed_down':2048,'local_links':1})
+        assert 'P2P' in window.runtime_values['path'].cget('text')
+        assert window.runtime_values['local_links'].cget('text')=='1'
+        assert 'KiB' in window.runtime_values['traffic'].cget('text')
         window.transfer_status({'operation':'upload','stage':'transfer','percent':63,'done':2,'total':4,'unit':'bytes'})
         assert window.transfer_number.cget('text')=='63.0%'
         window.finish_transfer(False,'模拟上传失败')

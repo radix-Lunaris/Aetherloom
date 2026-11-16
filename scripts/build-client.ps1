@@ -4,12 +4,13 @@ $projectRoot = [IO.Path]::GetFullPath((Get-Location).Path)
 $releaseRoot = Join-Path $projectRoot 'release'
 $scratchRoot = Join-Path $releaseRoot '.build'
 New-Item -ItemType Directory -Force $scratchRoot | Out-Null
-foreach ($jar in @('aetherloom-bridge-0.1.0.jar','aetherloom-playerdata.jar','aetherloom-agent.jar')) {
+foreach ($jar in @('aetherloom-bridge-0.1.1.jar','aetherloom-playerdata.jar','aetherloom-agent.jar','authlib-injector.jar')) {
     if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "assets/$jar"))) { throw 'Build Bridge and playerdata first, or run scripts/build-release.ps1' }
 }
 $licensesRoot = Join-Path $scratchRoot 'licenses'
 New-Item -ItemType Directory -Force $licensesRoot | Out-Null
 Copy-Item LICENSE,THIRD_PARTY.md -Destination $licensesRoot
+Copy-Item aetherloom/vendor/authlib/* -Destination $licensesRoot
 Copy-Item playerdata/LICENSE.shared-playerdata -Destination $licensesRoot
 Copy-Item aetherloom/vendor/craftlink/SOURCE.json -Destination (Join-Path $licensesRoot 'CraftLink-SOURCE.json')
 Copy-Item bridge/SOURCE.json -Destination (Join-Path $licensesRoot 'Aetherloom-Bridge-SOURCE.json')

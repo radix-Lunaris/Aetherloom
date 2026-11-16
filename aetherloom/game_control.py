@@ -3,12 +3,11 @@ import json
 from pathlib import Path
 import uuid
 
-AGENT_ENVIRONMENT={'minecraft':'1.20.1','loader':'forge','loader_version':'47.4.22'}
 CAPABILITIES=('world','lan','join','identity','saved','exit')
 
 def agent_config(control):
     data=json.loads(control.config.read_text(encoding='utf-8'))
-    data['adapter']='1.20.1-forge';data['identity']=str(uuid.UUID(data['identity']))
+    data.setdefault('adapter','1.20.1-forge');data['identity']=str(uuid.UUID(data['identity']))
     # Properties.load uses ISO-8859-1 with Java unicode escapes.
     def escape(value):
         value=str(value).replace('\\','\\\\').replace('\n','\\n').replace('\r','\\r').replace('\t','\\t').replace('=','\\=').replace(':','\\:').replace(' ','\\ ')

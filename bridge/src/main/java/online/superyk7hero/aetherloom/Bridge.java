@@ -27,6 +27,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Inert without a per-launch configuration supplied by Aetherloom. */
 @Mod("aetherloom_bridge")
@@ -44,6 +45,8 @@ public class Bridge {
     private boolean connecting = false;
     private boolean joined = false;
     private volatile boolean finished = false;
+    private long nextStats=0;
+    private final AtomicBoolean statsPending=new AtomicBoolean();
 
     public Bridge() {
         String file = System.getenv("AETHERLOOM_BRIDGE_FILE");
@@ -68,19 +71,26 @@ public class Bridge {
 
     private void negotiate(PlayerNegotiationEvent negotiation) {
         if (config.has("join") || config.get("inspect").getAsBoolean()) return;
+        if (negotiation.getConnection().isMemoryConnection()) return;
         // Vanilla offline LAN derives UUID from the name. Apply the identity
         // attached to this authenticated software member's scoped relay stream
         // before login acceptance loads playerdata; never infer ownership by name.
         negotiation.enqueueWork(() -> {
             try {
                 String name = negotiation.getProfile().getName();
-                HttpRequest req = HttpRequest.newBuilder(URI.create(config.get("endpoint").getAsString()+"/identity/"+URLEncoder.encode(name,StandardCharsets.UTF_8)))
+                boolean external=config.has("auth_mode") && config.get("auth_mode").getAsString().equals("littleskin");
+                String lookup=external?"by-uuid/"+negotiation.getProfile().getId():URLEncoder.encode(name,StandardCharsets.UTF_8);
+                HttpRequest req = HttpRequest.newBuilder(URI.create(config.get("endpoint").getAsString()+"/identity/"+lookup))
                     .header("Authorization","Bearer "+config.get("token").getAsString()).timeout(Duration.ofSeconds(3)).GET().build();
                 HttpResponse<String> response = http.send(req,HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode()!=200) throw new IllegalStateException("Identity lookup rejected");
                 JsonObject identity=gson.fromJson(response.body(),JsonObject.class);
-                if (!identity.has("uuid") || identity.get("uuid").isJsonNull()) return;
+                if (!identity.has("uuid") || identity.get("uuid").isJsonNull()) throw new IllegalStateException("Peer is not registered");
                 UUID id=UUID.fromString(identity.get("uuid").getAsString());
+                if (config.has("auth_mode") && config.get("auth_mode").getAsString().equals("littleskin")) {
+                    if (!id.equals(negotiation.getProfile().getId())) throw new IllegalStateException("Verified LittleSkin UUID mismatch");
+                    return; // Preserve the authenticated profile and signed texture properties.
+                }
                 java.lang.reflect.Field field=com.mojang.authlib.GameProfile.class.getDeclaredField("id");
                 field.setAccessible(true);field.set(negotiation.getProfile(),id);
                 if (!id.equals(negotiation.getProfile().getId())) throw new IllegalStateException("UUID update failed");
@@ -116,7 +126,7 @@ public class Bridge {
             int port = 0;
             if (!config.has("inspect") || !config.get("inspect").getAsBoolean()) {
                 try (ServerSocket socket = new ServerSocket(0)) { port = socket.getLocalPort(); }
-                server.setUsesAuthentication(false);
+                server.setUsesAuthentication(config.has("auth_mode") && config.get("auth_mode").getAsString().equals("littleskin"));
                 if (!server.publishServer(server.getDefaultGameType(), false, port))
                     throw new IllegalStateException("Unable to publish selected world");
             }
@@ -186,6 +196,14 @@ public class Bridge {
     private void tick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
+        if (loaded && System.currentTimeMillis()>=nextStats && statsPending.compareAndSet(false,true)) {
+            nextStats=System.currentTimeMillis()+2000;
+            int count=mc.getSingleplayerServer()!=null?mc.getSingleplayerServer().getPlayerCount():mc.getConnection()!=null?mc.getConnection().getOnlinePlayers().size():0;
+            JsonObject data=new JsonObject();data.addProperty("event","stats");data.addProperty("players",count);
+            data.addProperty("world",config.get("world").getAsString());data.addProperty("uuid",config.get("identity").getAsString());
+            http.sendAsync(request().POST(HttpRequest.BodyPublishers.ofString(gson.toJson(data))).build(),HttpResponse.BodyHandlers.discarding())
+                .whenComplete((response,error)->statsPending.set(false));
+        }
         if (config.has("join")) join(mc);
         if (finished && mc.level == null && mc.getSingleplayerServer() == null) {
             finished = false;

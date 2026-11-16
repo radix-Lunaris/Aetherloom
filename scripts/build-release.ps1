@@ -1,10 +1,15 @@
+param([switch]$Offline)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $projectRoot = [IO.Path]::GetFullPath((Get-Location).Path)
 & ./.venv/Scripts/python.exe scripts/build_agent.py
 if ($LASTEXITCODE -ne 0) { throw 'Agent build failed' }
+& ./.venv/Scripts/python.exe scripts/fetch_authlib.py
+if ($LASTEXITCODE -ne 0) { throw 'Pinned authlib download failed' }
 & ./scripts/build-playerdata.ps1
-& ./scripts/build-bridge.ps1
+& ./scripts/build-bridge.ps1 -Offline:$Offline
+$oldBridge = Join-Path $projectRoot 'assets/aetherloom-bridge-0.1.0.jar'
+if (Test-Path -LiteralPath $oldBridge) { Remove-Item -LiteralPath $oldBridge -Force }
 & ./scripts/build-client.ps1
 & ./.venv/Scripts/python.exe scripts/package_server.py
 if ($LASTEXITCODE -ne 0) { throw 'Server packaging failed' }
@@ -16,7 +21,7 @@ $lines = foreach ($name in @('Aetherloom.exe','Aetherloom-Server.tar.gz')) {
 [IO.File]::WriteAllLines((Join-Path $releaseRoot 'SHA256SUMS.txt'), $lines, [Text.UTF8Encoding]::new($false))
 # Remove generated app artifacts only. Preserve source, worlds, credentials,
 # installed Java, dependency caches and published remote release history.
-foreach ($relative in @('release/.build','dist','build','bridge/build','playerdata/build','agent/build')) {
+foreach ($relative in @('release/.build','dist','build','bridge/build','playerdata/build','agent/build','.local/fixture21/classes')) {
     $target = [IO.Path]::GetFullPath((Join-Path $projectRoot $relative))
     if (-not $target.StartsWith($projectRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Cleanup target escaped project' }
     if (Test-Path -LiteralPath $target) {
@@ -29,11 +34,11 @@ foreach ($relative in @('release/.build','dist','build','bridge/build','playerda
         Remove-Item -LiteralPath $target -Recurse -Force
     }
 }
-foreach ($name in @('aetherloom-bridge-0.1.0.jar','aetherloom-playerdata.jar','aetherloom-agent.jar')) {
+foreach ($name in @('aetherloom-bridge-0.1.1.jar','aetherloom-playerdata.jar','aetherloom-agent.jar','authlib-injector.jar')) {
     $target = Join-Path $projectRoot "assets/$name"
     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
 }
-foreach ($relative in @('Aetherloom.spec','.local/backups/Aetherloom-Windows-qt.zip')) {
+foreach ($relative in @('Aetherloom.spec','.local/backups/Aetherloom-Windows-qt.zip','.local/fixture21/aetherloom-fixture21.jar')) {
     $target = [IO.Path]::GetFullPath((Join-Path $projectRoot $relative))
     if (-not $target.StartsWith($projectRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Obsolete artifact escaped project' }
     if (Test-Path -LiteralPath $target) {
@@ -46,17 +51,19 @@ foreach ($relative in @('Aetherloom.spec','.local/backups/Aetherloom-Windows-qt.
         Remove-Item -LiteralPath $target -Force
     }
 }
-if (Test-Path -LiteralPath '.local/game-test') {
-    foreach ($run in (Get-ChildItem -LiteralPath '.local/game-test' -Directory)) {
+foreach ($testRoot in @('.local/game-test','.local/game-test21')) {
+if (Test-Path -LiteralPath $testRoot) {
+    foreach ($run in (Get-ChildItem -LiteralPath $testRoot -Directory)) {
         if ($run.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
         $mods = Join-Path $run.FullName 'mods'
         if (-not (Test-Path -LiteralPath $mods)) { continue }
         if ((Get-Item -LiteralPath $mods).Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
-        foreach ($name in @('aetherloom-bridge-0.1.0.jar','aetherloom-bridge-0.1.0-fixture.jar')) {
+        foreach ($name in @('aetherloom-bridge-0.1.0.jar','aetherloom-bridge-0.1.0-fixture.jar','aetherloom-bridge-0.1.1.jar','aetherloom-bridge-0.1.1-fixture.jar','aetherloom-fixture21.jar')) {
             $copy = [IO.Path]::GetFullPath((Join-Path $mods $name))
             if (-not $copy.StartsWith($projectRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Test artifact escaped project' }
             if (Test-Path -LiteralPath $copy) { Remove-Item -LiteralPath $copy -Force }
         }
     }
+}
 }
 Write-Output 'Only release/Aetherloom.exe, Aetherloom-Server.tar.gz and SHA256SUMS.txt remain as deliverables.'

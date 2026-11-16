@@ -77,8 +77,28 @@ class Network:
         self.on_status=on_status or (lambda state:None)
         self.peers={};self.peer_sockets={};self.groups=set();self.stopped=threading.Event()
         self.manager=AutoManager(candidate=lambda peer:self.peers.get(peer),on_status=on_status,config=Config(memory_limit=64*1024*1024))
+        self.bytes_up=self.bytes_down=0
+        self.manager.on_traffic=self.traffic
+        self.metrics_started=False
         self.tasks=set();self.server=None
         self.paths=weakref.WeakSet()
+
+    def traffic(self,path,up,down):
+        self.bytes_up+=up;self.bytes_down+=down
+
+    async def metrics(self):
+        import time
+        last=time.monotonic();up=down=0
+        while not self.stopped.is_set():
+            now=time.monotonic();elapsed=max(.001,now-last)
+            self.on_status(dict(session_id='metrics',channel='metrics',bytes_up=self.bytes_up,bytes_down=self.bytes_down,
+                speed_up=(self.bytes_up-up)/elapsed,speed_down=(self.bytes_down-down)/elapsed,
+                local_links=sum(not s.network_only for s in self.manager.streams.values())))
+            last=now;up=self.bytes_up;down=self.bytes_down
+            await asyncio.sleep(1)
+
+    def start_metrics(self):
+        if not self.metrics_started:self.metrics_started=True;self.spawn(self.metrics())
 
     async def path(self,info):
         from websockets.asyncio.client import connect
@@ -144,6 +164,7 @@ class Network:
         return task
 
     async def listen(self,room,identity=None):
+        self.start_metrics()
         async def accepted(reader,writer):
             try:
                 info=await asyncio.to_thread(self.request,'/api/rooms/'+room+'/connections',{'identity':identity} if identity else {})
@@ -158,6 +179,7 @@ class Network:
         return self.server.sockets[0].getsockname()[1]
 
     async def host(self,room,port,on_identity=None):
+        self.start_metrics()
         attached=set()
         async def attach(info):
             if on_identity and info.get('identity'):on_identity(info['identity'])

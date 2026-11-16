@@ -74,6 +74,10 @@ class NetworkTests(unittest.TestCase):
             await asyncio.sleep(.5)
             writer.write(b'fallback');await writer.drain()
             self.assertEqual(await asyncio.wait_for(reader.readexactly(8),10),b'fallback')
+            await asyncio.sleep(1.1)
+            metrics=[s for s in states if s.get('channel')=='metrics']
+            self.assertTrue(any(s['bytes_up']>=len(payload) and s['bytes_down']>=len(payload) for s in metrics))
+            self.assertTrue(any(s['local_links']>=1 for s in metrics))
         finally:
             if writer:writer.close()
             await guest.close();await host.close()

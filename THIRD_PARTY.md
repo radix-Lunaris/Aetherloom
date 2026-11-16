@@ -5,6 +5,8 @@ Current dev distribution does not bundle a Java runtime. Existing Java is discov
 Included / referenced components:
 - CraftLink: GPLv3; local reviewed dev 8178a3df0e73a88c41bab70574014b98b1c36ffe. Unmodified transport modules are under aetherloom/vendor/craftlink, with GPL license and SOURCE.json SHA-256 pins. Account policy is adapted in management.py. Upstream stream tests are adapted in tests/test_craftlink_stream.py.
 - MCsaves-sync (design reference only, no source included): GPLv3; 17afc06e4ef19720afc43b725bac9baaa8d9b062; hash algorithm will not be inherited.
+- Save discovery follows the selected-instance saves/level.dat layout and metadata fields in MCsaves-sync client/core/scanner.py and nbt.py. Aetherloom's bounded NBT reader is original; no filesystem-wide scans or runtime region hashing are added.
+- CraftLink STUN diagnostics: upstream core/stun.py at 8178a3df0e73a88c41bab70574014b98b1c36ffe, GPLv3. Vendored with import-only enum adaptation; exact hashes and changes are in vendor/craftlink/SOURCE.json. Status terminology follows upstream gui/presentation.py. The diagnostic socket's result does not assert the operational P2P socket's reachability.
 - shared-playerdata: MIT, Copyright 2026 radix-angelicae; baseline 2d0cf068ff252d7542d44536a677a2fdb247cff7. Tag.java, NbtIo.java and Uuids.java are included unmodified under playerdata; MIT notice and SOURCE.json are preserved. The strict selected-world entrypoint is original adaptation.
 Aetherloom distribution will include compatible source and notices. Build-time JDK/Gradle and user-provided game files retain their respective licenses.
 
@@ -15,4 +17,6 @@ Java management behavior reference (no HMCL source imported): HMCL JavaManager, 
 
 Single-file client: embedded project/dependency notices are accessible in the desktop license viewer. The two helper JARs and BUILD_INFO.json are embedded resources; no separate copies are retained as workspace deliverables.
 
-Aetherloom Bridge: GPL-3.0-only; standalone source https://github.com/radix-Lunaris/Aetherloom-Bridge at 58703f093407c8c34750313c86c5e828746c1a0b. The vendored bridge/SOURCE.json pins source hashes. Supports Minecraft 1.20.1 / Forge 47.4.22; not a universal cross-version Mod. It does not include the separate MIT shared-playerdata helper.
+Aetherloom Bridge 0.1.1: GPL-3.0-only; standalone source https://github.com/radix-Lunaris/Aetherloom-Bridge at 58b988891d2f96101b810ecfc0984aaeb2b0dbd5. The vendored bridge/SOURCE.json pins source hashes. Targets Minecraft 1.20.1 / Forge 47, tested against 47.4.22; not a universal cross-version Mod. It does not include the separate MIT shared-playerdata helper.
+
+authlib-injector1.2.8: unmodified upstream build56, source commit5437f5b465ee3f5be0a1e5e1ae3c50978114f6fb, https://github.com/yushijinhun/authlib-injector/tree/5437f5b465ee3f5be0a1e5e1ae3c50978114f6fb . AGPLv3-or-later with AUTHLIB-INJECTOR exception (unaltered binary bundling and Java Agent use). Corresponding source is available at that upstream commit. Full license and embedded dependency notices are preserved in aetherloom/vendor/authlib and the EXE license viewer; SOURCE.json pins URL/SHA-256. Used for LittleSkin Yggdrasil game identity/skins, independently of Aetherloom software login.

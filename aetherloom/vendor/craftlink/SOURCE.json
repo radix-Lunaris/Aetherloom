@@ -13,5 +13,12 @@
     "client/mclink/core/traffic.py": "7b385dd4d70c908acb2fa8101035ac1c8ced6631b53c8f2173c5ee9bb5e64c88"
   },
   "changes": "Unmodified transport core; Aetherloom authentication and TLS WebSocket adapter are separate.",
-  "hash_format": "SHA-256 of UTF-8 text with LF line endings"
+  "hash_format": "SHA-256 of UTF-8 text with LF line endings",
+  "nat_diagnostics": {
+    "source_path": "client/mclink/core/stun.py",
+    "commit": "8178a3df0e73a88c41bab70574014b98b1c36ffe",
+    "original_sha256": "a4b413f6c5b2ec8dc23d6756024ae681e0025cbf97c9b5b85677d25004a55282",
+    "vendored_sha256": "a9bd772c54ce91861f17aca152069a51a1bfb1d73e7f04aa550dc8a0411c88de",
+    "patch": "Only redirect the two enum conversions and filtering constant import to a minimal nat_types adapter; wire/probe/classifier implementation unchanged."
+  }
 }

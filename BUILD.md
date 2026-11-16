@@ -36,3 +36,4 @@ PyInstaller收集CustomTkinter的主题／字体／图片以及项目和第三�
 
 实验分支的完整构建会先用已有开发JDK编译无第三方依赖的Java8字节码Agent，并连同Bridge、玩家数据修复器、Python及GUI运行依赖嵌入唯一的Aetherloom.exe。客户电脑不需要开发环境；Java从已有安装识别，发行包不包含Java。单独验证Agent可运行 `python scripts/build_agent.py`，但最终交付使用完整构建脚本并清理中间JAR。
 
+LittleSkin发行构建会在开发机获取固定SHA-256的authlib-injector1.2.8并内嵌EXE，用户无需下载。Forge开发依赖已有缓存时可使用 `scripts/build-release.ps1 -Offline`，该模式仅跳过离线构建无意义的Forge证书预检，网络认证HTTPS校验不受影响。缺失构建依赖仍报错，不从未验证镜像补齐。
