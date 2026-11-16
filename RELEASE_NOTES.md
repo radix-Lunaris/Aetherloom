@@ -1,4 +1,4 @@
-# Aetherloom v0.4.0a4 — 存档识别、联机状态与 LittleSkin
+# Aetherloom v0.4.0a5 — 存档识别、联机状态与 LittleSkin
 
 - 在本地游戏中添加LittleSkin账号、下拉选择角色；独立于Aetherloom软件账号，角色名称/UUID由LittleSkin确定。
 - Windows用户级DPAPI加密保存令牌、启动前刷新；不保存密码，不将令牌写入普通配置或软件游戏日志。

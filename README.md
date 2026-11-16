@@ -18,4 +18,4 @@
 
 实验分支experiment/java-agent提供默认关闭的Java Agent控制原型，详见AGENT_EXPERIMENT.md。此分支发布Prerelease，不替代v0.3.0稳定版；已测在线环境为1.20.1/Forge47及Agent的1.21.1/Forge52，不再精确锁定Forge补丁号。其他版本可个人启动，完整Hop仍需对应适配。
 
-v0.4.0a4新增LittleSkin游戏账号、当前实例的自动存档识别，以及同CraftLink口径的NAT／入站／打洞／速度等联机状态。独立软件账号与游戏账号分开；没有实测数据的字段显示未测，详情见发行说明。
+v0.4.0a5新增LittleSkin游戏账号、当前实例的自动存档识别，以及同CraftLink口径的NAT／入站／打洞／速度等联机状态。独立软件账号与游戏账号分开；没有实测数据的字段显示未测，详情见发行说明。

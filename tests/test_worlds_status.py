@@ -37,7 +37,7 @@ class WorldDiscoveryTests(unittest.TestCase):
             def read(path):reads.append(path);return original(path)
             with patch.object(Path,'read_bytes',read):rows=discover(run)
             self.assertEqual([r['folder'] for r in rows],['中文世界','旧世界','损坏'])
-            self.assertTrue(all(p.name=='level.dat' and p.parent.parent==saves for p in reads))
+            self.assertTrue(all(p.name=='level.dat' and p.parent.parent.resolve()==saves.resolve() for p in reads))
             self.assertEqual(rows[0]['game_version'],'1.20.1');self.assertEqual(rows[0]['gametype'],'创造')
             self.assertTrue(rows[2]['error']);self.assertFalse(rows[0]['error'])
 
