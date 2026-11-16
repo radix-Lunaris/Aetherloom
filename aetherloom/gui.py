@@ -259,7 +259,7 @@ class Window(ctk.CTk):
         self.java_download_button.pack(side='left')
         self.label(c,'从系统、注册表、用户 .jdks、游戏及启动器运行时目录发现；不读取其他启动器账号。',11,MUTED,wraplength=650).grid(row=10,column=0,sticky='w',padx=22,pady=6)
         self.path_row(c,11,'运行目录 · 自动识别版本隔离，可手动修改','run',False)
-        ctk.CTkCheckBox(c,text='实验 Agent 控制 · 仅用于测试，修改后重新绑定房间',variable=self.values['control_backend'],onvalue='agent',offvalue='bridge',command=self.save).grid(row=13,column=0,sticky='w',padx=22,pady=12)
+        ctk.CTkCheckBox(c,text='实验 Agent 控制 · 仅匹配游戏版本，修改后重新绑定房间',variable=self.values['control_backend'],onvalue='agent',offvalue='bridge',command=self.save).grid(row=13,column=0,sticky='w',padx=22,pady=12)
         self.button(c,'保存配置',self.save,primary=True,width=120).grid(row=14,column=0,sticky='e',padx=22,pady=20)
         self.build_game_accounts(scroll)
         self.build_worlds(scroll)

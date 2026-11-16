@@ -49,12 +49,15 @@ offline client profiles must align after its earlier login packet. External
 verified profiles are never rewritten. QuickPlay registration includes a
 selected-world readiness recovery to handle already-started servers.
 
-Room matching uses exact Minecraft version, loader type and Forge major;
-it no longer pins a Forge patch. Matching does not certify arbitrary Mod packs.
-Fabric, NeoForge and other Minecraft releases remain unsupported for automatic
-Hop until their complete lifecycle/identity adapters pass. Personal launching
-has no such adapter restriction. Java bootstrap CI is still distinct from
-full-game compatibility.
+From v0.4.0a6 Agent room matching checks only the exact Minecraft version.
+Loader type, Forge major/patch and the verified-combination allowlist are no
+longer gates. The Agent entrypoint also accepts arbitrary adapter labels;
+actual Forge event availability selects the configuration API path. Runtime
+capability, identity and save barriers still fail closed. This implementation
+uses Forge events; removing the gate does not implement Fabric/NeoForge support
+or certify arbitrary Mod packs. Bridge fallback keeps its existing limits.
+Personal launching has no such room restriction. Java bootstrap CI is still
+distinct from full-game compatibility.
 
 Stable dev and v0.3.0 remain at the baseline. Disable the experimental control
 option and rebind, or replace the EXE with v0.3.0. Never overwrite an interrupted

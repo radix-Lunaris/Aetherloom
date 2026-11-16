@@ -76,3 +76,14 @@ class StatusAndCompatibilityTests(unittest.TestCase):
         modern=dict(minecraft='1.21.1',loader='forge',loader_version='52.1.16')
         validate(modern,dict(modern,loader_version='52.0.0'),backend='agent')
         with self.assertRaises(ValueError):validate(modern,modern,backend='bridge')
+
+    def test_agent_matches_only_minecraft_without_loader_or_supported_list(self):
+        for game in ('1.16.5','1.19.2','1.20.1','1.21.1','1.21.4','24w14a'):
+            local=dict(minecraft=game,loader='forge',loader_version='999.0.1')
+            for remote in (dict(local,loader='fabric',loader_version='0.1.0'),{'minecraft':game},game):
+                with self.subTest(game=game,remote=remote):validate(local,remote,backend='agent')
+            with self.assertRaisesRegex(ValueError,'游戏版本不匹配'):
+                validate(local,{'minecraft':'1.18.2'},backend='agent')
+        for invalid in ({'minecraft':'None'},'a friendly profile',{'loader':'forge'}):
+            with self.assertRaisesRegex(ValueError,'明确的Minecraft'):
+                validate({'minecraft':'1.20.1'},invalid,backend='agent')

@@ -19,6 +19,7 @@ public final class Agent {
     static volatile boolean stop,finished,loaded,joined,stopping;
     static volatile Object pending,pinger,target;
     static volatile boolean connecting;
+    static boolean modernApi;
     static long joinDeadline;
     static final Set<String> reports=Collections.synchronizedSet(new HashSet<String>());
     static final AtomicBoolean statsPending=new AtomicBoolean();
@@ -36,7 +37,6 @@ public final class Agent {
         URI endpoint=URI.create(config.getProperty("endpoint"));
         if (!"http".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost()) || endpoint.getUserInfo()!=null)
             throw new IllegalArgumentException("Control must use loopback");
-        if (!Arrays.asList("1.20.1-forge","1.21.1-forge").contains(config.getProperty("adapter"))) throw new IllegalArgumentException("Unverified adapter");
         try(InputStream mappings=Agent.class.getResourceAsStream("/forge-1.20.1.properties")) {names.load(mappings);}
         Thread worker=new Thread(()->{
             try {
@@ -51,6 +51,8 @@ public final class Agent {
                 // QuickPlay can construct Minecraft while Forge is still setting
                 // up its event bus. Register only after mod loading completes.
                 while((minecraft()==null || Boolean.TRUE.equals(call(type("net.minecraftforge.client.loading.ClientModLoader"),"isLoading"))) && System.nanoTime()<deadline)Thread.sleep(100);
+                try {Class.forName("net.minecraftforge.event.network.GatherLoginConfigurationTasksEvent",false,gameLoader);modernApi=true;}
+                catch(ClassNotFoundException legacyApi) {modernApi=false;}
                 install();
                 while(!finished) {
                     stop=request("",null).contains("\"stop\": true");Thread.sleep(500);
@@ -142,7 +144,7 @@ public final class Agent {
         emit("capabilities",0);
         System.out.println("AETHERLOOM_AGENT_ADAPTER_INSTALLED "+config.getProperty("adapter"));
     }
-    static boolean modern() {return "1.21.1-forge".equals(config.getProperty("adapter"));}
+    static boolean modern() {return modernApi;}
     static void verifyIdentity(Object profile) throws Exception {
         String name=(String)call(profile,"getName");
         String lookup="littleskin".equals(config.getProperty("auth_mode"))?"by-uuid/"+call(profile,"getId"):URLEncoder.encode(name,"UTF-8");

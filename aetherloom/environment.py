@@ -68,6 +68,22 @@ def loader_family(environment):
 
 
 def validate(local, remote,backend='bridge'):
+    if backend=='agent':
+        # Agent room matching deliberately ignores loader type, major and patch.
+        # Runtime capabilities and save/identity barriers remain independent.
+        try:value=json.loads(remote) if isinstance(remote,str) else remote
+        except (ValueError,TypeError):value=remote
+        if isinstance(value,dict):version=value.get('minecraft')
+        elif isinstance(value,str):
+            legacy=decode(value)
+            version=legacy['minecraft'] if legacy else value.strip().removeprefix('Minecraft ')
+        else:version=None
+        valid=lambda v:isinstance(v,str) and bool(re.fullmatch(r'(?:\d+\.\d+(?:\.\d+)?(?:-(?:pre|rc)\d+)?|\d{2}w\d{2}[a-z])',v))
+        if not valid(version) or not valid(local.get('minecraft')):
+            raise ValueError('房间或本机缺少明确的Minecraft游戏版本，请补充版本声明后再绑定')
+        if local['minecraft']!=version:
+            raise ValueError('游戏版本不匹配：本机 '+local['minecraft']+'；房间 '+version)
+        return
     expected = decode(remote)
     if expected is None:
         raise ValueError('房间缺少明确版本声明，请管理员在面板设置版本和加载器后再绑定')
@@ -75,5 +91,4 @@ def validate(local, remote,backend='bridge'):
         raise ValueError('游戏环境不匹配：本机 '+encode(local)+'；房间 '+encode(expected))
     family=(local['minecraft'],local['loader'],loader_family(local))
     if family==('1.20.1','forge','47'):return
-    if backend=='agent' and family==('1.21.1','forge','52'):return
-    raise ValueError('此环境尚无可用的自动Hop适配。Agent候选支持1.20.1/Forge47与1.21.1/Forge52；其他版本可个人启动，不能伪装成已适配')
+    raise ValueError('Bridge模式需要1.20.1/Forge47；如需只按Minecraft版本匹配，请启用实验Agent并重新绑定')

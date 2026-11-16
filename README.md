@@ -16,6 +16,6 @@
 
 联机状态持续显示会话阶段和等待玩家状态；顶部进度条展示发布、上传、下载及Java安装进度，提交成功后才显示100%。Bridge已作为[独立GPLv3项目](https://github.com/radix-Lunaris/Aetherloom-Bridge)公开，应用内源码由bridge/SOURCE.json固定；当前只承诺上述经过验证的游戏／加载器组合。
 
-实验分支experiment/java-agent提供默认关闭的Java Agent控制原型，详见AGENT_EXPERIMENT.md。此分支发布Prerelease，不替代v0.3.0稳定版；已测在线环境为1.20.1/Forge47及Agent的1.21.1/Forge52，不再精确锁定Forge补丁号。其他版本可个人启动，完整Hop仍需对应适配。
+实验分支experiment/java-agent提供默认关闭的Java Agent控制原型，详见AGENT_EXPERIMENT.md。此分支发布Prerelease，不替代v0.3.0稳定版；Agent模式只匹配Minecraft游戏版本，不校验加载器类型及Forge号，也没有游戏组合白名单；实际控制仍需满足运行时能力，已测环境为1.20.1/Forge47与1.21.1/Forge52。取消门禁不表示所有加载器已适配。
 
-v0.4.0a5新增LittleSkin游戏账号、当前实例的自动存档识别，以及同CraftLink口径的NAT／入站／打洞／速度等联机状态。独立软件账号与游戏账号分开；没有实测数据的字段显示未测，详情见发行说明。
+v0.4.0a6新增LittleSkin游戏账号、当前实例的自动存档识别，以及同CraftLink口径的NAT／入站／打洞／速度等联机状态。独立软件账号与游戏账号分开；没有实测数据的字段显示未测，详情见发行说明。
