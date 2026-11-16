@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory() as d:
     window=Window(root/'settings');window.withdraw()
     try:
         assert window.bindings['legacy']['java_mode']=='auto'
+        assert window.values['control_backend'].get()=='bridge'
         window.values['root'].set(str(root/'game'))
         window.values['java'].set(str(root/'java.exe'))
         window.values['name'].set('OfflinePlayer')
@@ -82,6 +83,9 @@ with tempfile.TemporaryDirectory() as d:
         window.values['version'].set('test-forge');window.select_version(save=False)
         assert window.values['run'].get()==str(root/'custom-run')
         assert window.values['uuid'].get()=='81f14300-fbc1-4a46-88f0-0d90db478198'
+        window.values['control_backend'].set('agent');window.remember_profile()
+        assert window.current_binding()['control_backend']=='agent'
+        window.values['control_backend'].set('bridge');window.remember_profile()
         wait(window,lambda:window.pending==0)
         # Java detection and installation must remain on workers, preserve
         # manual choices, and switch to the matching stable major in auto mode.

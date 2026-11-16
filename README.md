@@ -15,3 +15,5 @@
 构建仅输出到 `release/`：独立单文件 `Aetherloom.exe`、`Aetherloom-Server.tar.gz` 和校验和，不再另打客户端ZIP或保留dist副本。见BUILD.md。
 
 联机状态持续显示会话阶段和等待玩家状态；顶部进度条展示发布、上传、下载及Java安装进度，提交成功后才显示100%。Bridge已作为[独立GPLv3项目](https://github.com/radix-Lunaris/Aetherloom-Bridge)公开，应用内源码由bridge/SOURCE.json固定；当前只承诺上述经过验证的游戏／加载器组合。
+
+实验分支experiment/java-agent提供默认关闭的Java Agent控制原型，详见AGENT_EXPERIMENT.md。此分支发布Prerelease，不替代v0.3.0稳定版；当前在线环境仍限定1.20.1/Forge47.4.22。

@@ -192,3 +192,14 @@ materialize尚未处理云端删除文件、精确镜像、空目录与完整恢
 - 验证已完成：48项自动化回归通过；GUI无流Host摘要、LAN端口、失败百分比保留和100%成功提示通过，并检查实际窗口布局。
 - 本地真实1.20.1/Forge47.4.22双进程通过：Host无对端时ready摘要、Player自动入服active、原测试玩家23级/2绿宝石、Player退出不上传并关闭游戏、Host最终上传且游戏关闭。临时房间已删除，无生产ECS写入。
 - 独立Bridge在本地及GitHub Forge build均通过，正常JAR包含GPL声明、不含测试Fixture；v0.1.0已发行，源提交58703f093407c8c34750313c86c5e828746c1a0b。
+
+## 2026-11-16 Java Agent隔离实验
+- 分支experiment/java-agent，基线v0.3.0/6b2d576；不合dev/main、不部署ECS。新配置默认bridge，实验Agent需在本地游戏设置显式启用并重新绑定。
+- 实现Java8字节码、无第三方依赖的启动Agent，通过Instrumentation找到游戏类加载器，使用显式SRG映射和Forge公共事件控制生命周期；没有对每个实例单独编译Mod，也没有修改原始游戏JAR。
+- 首轮真实测试暴露Agent参数中文编码及Forge事件转换线程上下文类加载器问题，均已修复。后续增加能力握手、实际UUID检查、远程身份失败断开、异步HTTP、保存确认后退出。
+- 实测未安装Bridge Mod的1.20.1/Forge47.4.22副本已完成世界/LAN/正常保存/文件锁释放/游戏退出；自定义UUID双进程复测中。50项自动化回归通过，GUI通过。
+- Java8/11/17/21/25的Windows与Linux矩阵是Agent引导检查，不是这些Java都可启动所有Minecraft；其他Minecraft/加载器仍阻止在线，不能将本实验当成广版本验收通过。
+- 单EXE内嵌Agent/Bridge/修复器/GUI运行依赖；不捆绑Java，不要求客户额外准备JDK；构建仍唯一release目录。
+- 当前玩家数据辅助器仍需Java17；将其连同NBT行为扩展至Java8/11尚未验证。因此本轮不开放旧版完整Hop，不用Agent引导检查掩盖这个限制。
+- 真实Agent双进程完成：自动加入、自定义UUID首次保存后再次加入，23级/2绿宝石保持；Player退出不上传、Host最终提交和两个游戏自动关闭通过。测试世界是副本、本地临时服务，未修改生产ECS。结果在.local/agent-custom-uuid-result.json。
+- 新增错误锁存：游戏控制报错后不接受后续ready/saved事件，已运行Host也禁止因后续正常保存绕过失败提交。

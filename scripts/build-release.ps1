@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $projectRoot = [IO.Path]::GetFullPath((Get-Location).Path)
+& ./.venv/Scripts/python.exe scripts/build_agent.py
+if ($LASTEXITCODE -ne 0) { throw 'Agent build failed' }
 & ./scripts/build-playerdata.ps1
 & ./scripts/build-bridge.ps1
 & ./scripts/build-client.ps1
@@ -14,7 +16,7 @@ $lines = foreach ($name in @('Aetherloom.exe','Aetherloom-Server.tar.gz')) {
 [IO.File]::WriteAllLines((Join-Path $releaseRoot 'SHA256SUMS.txt'), $lines, [Text.UTF8Encoding]::new($false))
 # Remove generated app artifacts only. Preserve source, worlds, credentials,
 # installed Java, dependency caches and published remote release history.
-foreach ($relative in @('release/.build','dist','build','bridge/build','playerdata/build')) {
+foreach ($relative in @('release/.build','dist','build','bridge/build','playerdata/build','agent/build')) {
     $target = [IO.Path]::GetFullPath((Join-Path $projectRoot $relative))
     if (-not $target.StartsWith($projectRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Cleanup target escaped project' }
     if (Test-Path -LiteralPath $target) {
@@ -27,7 +29,7 @@ foreach ($relative in @('release/.build','dist','build','bridge/build','playerda
         Remove-Item -LiteralPath $target -Recurse -Force
     }
 }
-foreach ($name in @('aetherloom-bridge-0.1.0.jar','aetherloom-playerdata.jar')) {
+foreach ($name in @('aetherloom-bridge-0.1.0.jar','aetherloom-playerdata.jar','aetherloom-agent.jar')) {
     $target = Join-Path $projectRoot "assets/$name"
     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
 }

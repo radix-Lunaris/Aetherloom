@@ -17,3 +17,5 @@ playerdata/build/
 assets/*.jar
 .env
 
+
+agent/build/

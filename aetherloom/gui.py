@@ -100,7 +100,7 @@ class Window(ctk.CTk):
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
-             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid",""),("java_mode","auto")]}
+             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid",""),("java_mode","auto"),("control_backend","bridge")]}
         if self.values['url'].get().rstrip('/').lower() in ('https://artherlink.superyk7hero.online','https://artherlink.superyk7hero.online:443'):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else "")
@@ -252,7 +252,8 @@ class Window(ctk.CTk):
         self.java_download_button.pack(side='left')
         self.label(c,'从系统、注册表、用户 .jdks、游戏及启动器运行时目录发现；不读取其他启动器账号。',11,MUTED,wraplength=650).grid(row=10,column=0,sticky='w',padx=22,pady=6)
         self.path_row(c,11,'运行目录 · 自动识别版本隔离，可手动修改','run',False)
-        self.button(c,'保存配置',self.save,primary=True,width=120).grid(row=13,column=0,sticky='e',padx=22,pady=20)
+        ctk.CTkCheckBox(c,text='实验 Agent 控制 · 仅用于测试，修改后重新绑定房间',variable=self.values['control_backend'],onvalue='agent',offvalue='bridge',command=self.save).grid(row=13,column=0,sticky='w',padx=22,pady=12)
+        self.button(c,'保存配置',self.save,primary=True,width=120).grid(row=14,column=0,sticky='e',padx=22,pady=20)
 
     def path_row(self,parent,row,title,key,file):
         self.label(parent,title,12,MUTED).grid(row=row,column=0,sticky="w",padx=22,pady=(10,6))
@@ -581,7 +582,7 @@ class Window(ctk.CTk):
         self.task(publish,done,failed)
 
     def current_binding(self):
-        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid','java_mode')}
+        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid','java_mode','control_backend')}
         try:game_uuid(b['name'],b['uuid'])
         except ValueError as e:self.note(str(e),True);return None
         if not b['root'] or (not b['java'] and b['java_mode']=='manual') or b['version']=='尚未选择':
@@ -763,7 +764,7 @@ class Window(ctk.CTk):
 
     def remember_profile(self):
         if self.profile_key:
-            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid','java_mode')}
+            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid','java_mode','control_backend')}
 
     def select_version(self,save=True):
         self.remember_profile()
@@ -772,12 +773,12 @@ class Window(ctk.CTk):
         profile=self.profiles.get(self.profile_key)
         if profile:
             self.values['uuid'].set(profile.get('uuid',''))
-            self.values['java_mode'].set(profile.get('java_mode','auto'))
+            self.values['java_mode'].set(profile.get('java_mode','auto'));self.values['control_backend'].set(profile.get('control_backend','bridge'))
             for key,value in profile.items():
                 if key in self.values:self.values[key].set(value)
         else:
             if previous and previous!=self.profile_key:
-                self.values['uuid'].set('');self.values['java_mode'].set('auto')
+                self.values['uuid'].set('');self.values['java_mode'].set('auto');self.values['control_backend'].set('bridge')
             if previous and previous!=self.profile_key or self.values['run'].get()==self.auto_run:self.values['run'].set('')
             self.suggest_run()
         self.detect_java(save=save)

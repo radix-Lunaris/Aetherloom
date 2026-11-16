@@ -197,9 +197,15 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
                 target.write_bytes(z.read(entry))
     return [str(java), f"-Xmx{memory}M", *jvm, m["mainClass"], *game], run
 
-def launch(*args, quick_play=None, bridge_file=None, before_start=None, managed=False, **kwargs):
+def launch(*args, quick_play=None, bridge_file=None, agent_jar=None, agent_config=None, before_start=None, managed=False, **kwargs):
     command, run = prepare(*args, **kwargs)
     environment=None
+    if agent_jar or agent_config:
+        if not agent_jar or not agent_config or not Path(agent_jar).is_file() or not Path(agent_config).is_file():raise LaunchError('Incomplete agent resources')
+        if bridge_file:raise LaunchError('Agent and Bridge cannot control the same game')
+        command.insert(1,'-javaagent:'+java_path(Path(agent_jar).resolve())+'=managed')
+        environment=dict(os.environ,AETHERLOOM_AGENT_CONFIG=str(Path(agent_config).resolve()))
+        environment.pop('AETHERLOOM_BRIDGE_FILE',None)
     if quick_play:
         mode,value=quick_play
         if mode not in ('Singleplayer','Multiplayer'):raise LaunchError('Unsupported quick play mode')

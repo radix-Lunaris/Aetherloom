@@ -5,14 +5,16 @@ are restricted to this repository. Usage: python scripts/publish_release.py stag
 then, after the same source commit passes CI, run with `publish`.
 """
 from pathlib import Path
-import argparse,hashlib,json,subprocess,tarfile,tomllib,urllib.request,urllib.parse,urllib.error
+import argparse,hashlib,json,re,subprocess,tarfile,tomllib,urllib.request,urllib.parse,urllib.error
 from PyInstaller.archive.readers import CArchiveReader
 
 root=Path(__file__).resolve().parent.parent
 repo='radix-Lunaris/Aetherloom'
-parser=argparse.ArgumentParser();parser.add_argument('action',choices=['verify','stage','publish'])
+parser=argparse.ArgumentParser();parser.add_argument('action',choices=['verify','stage','publish']);parser.add_argument('--branch',choices=['dev','experiment/java-agent'],default='dev')
 args=parser.parse_args()
 version=tomllib.loads((root/'pyproject.toml').read_text())['project']['version']
+experimental=args.branch=='experiment/java-agent'
+if experimental != bool(re.search(r'(?:a|b|rc)\d+$',version)):raise SystemExit('Experimental branch and prerelease version must match')
 tag='v'+version
 expected=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
 if subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip():
@@ -67,7 +69,7 @@ def api(path,body=None,method=None,data=None,ctype='application/json'):
         except Exception:message='Request rejected'
         raise RuntimeError('GitHub API '+str(error.code)+': '+str(message)) from None
 
-if api('/branches/dev')['commit']['sha']!=expected:raise SystemExit('Remote dev moved; reconcile before release')
+if api('/branches/'+urllib.parse.quote(args.branch,safe=''))['commit']['sha']!=expected:raise SystemExit('Remote source branch moved; reconcile before release')
 tag_commit=subprocess.check_output(['git','rev-parse',tag+'^{commit}'],cwd=root,text=True).strip()
 if tag_commit!=expected:raise SystemExit('Tag differs from verified source')
 remote_tag=subprocess.check_output(['git','ls-remote','origin','refs/tags/'+tag+'^{}','refs/tags/'+tag],cwd=root,text=True)
@@ -77,7 +79,7 @@ if args.action=='stage':
     if release and not release['draft']:raise SystemExit('Published versions are immutable; increment version')
     if not release:
         release=api('/releases',{'tag_name':tag,'target_commitish':expected,'name':'Aetherloom '+tag,
-            'body':(root/'RELEASE_NOTES.md').read_text(encoding='utf-8')+'\n\nSource commit: `'+expected+'`','draft':True,'prerelease':False},method='POST')
+            'body':(root/'RELEASE_NOTES.md').read_text(encoding='utf-8')+'\n\nSource commit: `'+expected+'`','draft':True,'prerelease':experimental},method='POST')
     for asset in assets:
         old=next((a for a in release['assets'] if a['name']==asset['name']),None)
         if old and old.get('digest')==asset['digest'] and old['size']==asset['size']:continue
@@ -88,14 +90,14 @@ if args.action=='stage':
         print('Verified upload:',asset['name'],flush=True)
 else:
     if not release:raise SystemExit('Stage the release first')
-    runs=api('/actions/runs?branch=dev&per_page=20')['workflow_runs']
+    runs=api('/actions/runs?'+urllib.parse.urlencode({'branch':args.branch,'per_page':20}))['workflow_runs']
     if not any(r['head_sha']==expected and r['name']=='Core checks' and r['conclusion']=='success' for r in runs):raise SystemExit('Verified source CI has not succeeded; draft preserved')
     for asset in assets:
         old=next((a for a in release['assets'] if a['name']==asset['name']),None)
         if not old or old.get('digest')!=asset['digest'] or old['size']!=asset['size']:raise RuntimeError('Draft artifact mismatch')
-    if release['draft']:release=api('/releases/'+str(release['id']),{'draft':False,'prerelease':False,'make_latest':'true'},method='PATCH')
+    if release['draft']:release=api('/releases/'+str(release['id']),{'draft':False,'prerelease':experimental,'make_latest':'false' if experimental else 'true'},method='PATCH')
 release=api('/releases/'+str(release['id']))
-receipt={'tag':tag,'source_commit':expected,'url':release['html_url'],'draft':release['draft'],'published_at':release['published_at'],
+receipt={'tag':tag,'source_commit':expected,'branch':args.branch,'prerelease':release['prerelease'],'url':release['html_url'],'draft':release['draft'],'published_at':release['published_at'],
          'assets':[{'name':a['name'],'size':a['size'],'digest':a.get('digest'),'url':a['browser_download_url']} for a in release['assets']]}
 (root/'.local').mkdir(exist_ok=True)
 (root/'.local'/('release-'+tag+'.json')).write_text(json.dumps(receipt,indent=2),encoding='utf-8')

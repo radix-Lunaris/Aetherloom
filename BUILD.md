@@ -32,3 +32,7 @@ PyInstaller收集CustomTkinter的主题／字体／图片以及项目和第三�
 发布工具使用现有Git凭据，仅在内存中处理，不写令牌。开发阶段Release可来自dev；main仍在用户验收／要求后合入。服务器部署需要用户明确要求，不随发布自动执行。
 
 桌面检查：`python scripts/smoke_desktop.py`；核心检查：`python -m unittest discover -s tests -v`。源码运行共享功能前需构建Java模块；完整发行构建会自动处理和清理这些中间文件。Docker构建与升级见DEPLOY.md。
+# 实验 Agent 构建
+
+实验分支的完整构建会先用已有开发JDK编译无第三方依赖的Java8字节码Agent，并连同Bridge、玩家数据修复器、Python及GUI运行依赖嵌入唯一的Aetherloom.exe。客户电脑不需要开发环境；Java从已有安装识别，发行包不包含Java。单独验证Agent可运行 `python scripts/build_agent.py`，但最终交付使用完整构建脚本并清理中间JAR。
+

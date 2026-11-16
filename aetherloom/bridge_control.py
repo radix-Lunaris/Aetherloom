@@ -9,12 +9,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class BridgeControl:
-    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None):
+    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None,backend='bridge'):
         self.world=Path(world).resolve();self.identity=identity
         self.game_name=game_name
         self.token=secrets.token_urlsafe(32)
         self.ready=threading.Event();self.saved=threading.Event();self.stop=False;self.port=None
         self.error=None
+        self.backend=backend;self.capabilities=set();self.component=None
         self.peer_identities={}
         self.poll_count=0
         control=self
@@ -41,13 +42,21 @@ class BridgeControl:
                     data=json.loads(self.rfile.read(length))
                     if Path(data['world']).resolve()!=control.world or data['uuid'].replace('-','')!=control.identity.replace('-',''):
                         raise ValueError('Wrong world or identity')
-                    if data['event']=='ready':
+                    if control.error and data['event']!='error':raise ValueError('Control session has failed')
+                    if data['event']=='capabilities':
+                        from .game_control import CAPABILITIES
+                        if control.backend!='agent' or data.get('protocol')!=1 or data.get('component')!='agent' or set(data.get('capabilities',[]))!=set(CAPABILITIES):raise ValueError('Unsupported control capabilities')
+                        control.capabilities=set(data['capabilities']);control.component='agent'
+                    elif data['event']=='ready':
+                        if control.backend=='agent' and not control.capabilities:raise ValueError('Missing capabilities handshake')
                         port=int(data['port'])
                         if not ((inspect and port==0) or (not inspect and 1<=port<=65535)):raise ValueError('Invalid port')
                         control.port=port;control.ready.set()
                     elif data['event']=='saved' and control.ready.is_set():control.saved.set()
-                    elif data['event']=='joined' and join:control.ready.set()
-                    elif data['event']=='error':control.error='游戏Bridge未能准备世界或LAN，请查看游戏日志'
+                    elif data['event']=='joined' and join:
+                        if control.backend=='agent' and not control.capabilities:raise ValueError('Missing capabilities handshake')
+                        control.ready.set()
+                    elif data['event']=='error':control.error='游戏控制模块报告失败，禁止提交权威存档；请查看游戏日志'
                     else:raise ValueError('Invalid lifecycle event')
                     self.reply(200,{'ok':True})
                 except (ValueError,KeyError,TypeError):self.reply(400,{'ok':False})
@@ -73,3 +82,4 @@ class BridgeControl:
     def close(self):
         self.server.shutdown();self.server.server_close();self.thread.join(timeout=2)
         self.config.unlink(missing_ok=True)
+        self.config.with_suffix('.properties').unlink(missing_ok=True)
