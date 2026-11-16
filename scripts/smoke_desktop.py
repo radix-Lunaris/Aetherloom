@@ -72,7 +72,9 @@ with tempfile.TemporaryDirectory() as d:
         alternate=root/'game/versions/test-two';(alternate/'mods').mkdir(parents=True)
         (alternate/'test-two.json').write_text('{}')
         window.values['version'].set('test-two');window.select_version(save=False)
-        assert window.values['run'].get()==str(alternate)
+        # Windows runners may expose Temp through a junction or short path;
+        # compare the directory identity rather than its display spelling.
+        assert Path(window.values['run'].get()).resolve()==alternate.resolve()
         assert window.values['uuid'].get()==''
         window.values['version'].set('test-forge');window.select_version(save=False)
         assert window.values['run'].get()==str(root/'custom-run')

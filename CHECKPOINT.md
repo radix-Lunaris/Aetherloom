@@ -25,6 +25,7 @@
 - 最终完成后需追加提交、重建客户端／服务端包再推送 dev。main、Release、线上容器仍保持原状态。
 - 自定义 UUID Player 再次加入实测通过：Bridge确认身份一致，正确UUID玩家文件存在，恢复2绿宝石和23级经验；Player退出不上传，Host最终提交正常。记录 .local/custom-uuid-join-verification.json，测试房间已清理。
 - 自定义 UUID Host 新建隔离世界也通过：自动LAN、763状态、正常保存、文件锁释放、按指定UUID归档和游戏进程自动退出；记录 .local/custom-uuid-host-verification.json。最终34项回归、桌面 smoke、Forge构建均通过。后续产物以最终提交的 BUILD_INFO.json 为准，不使用19e1f2e中间包。
+- 远端2bc04ca：Ubuntu34项、Docker/MySQL构建与健康检查、Forge构建通过；Windows34项通过后，桌面smoke因临时目录的显示路径与resolve路径字符串比较失败。改为比较解析后的目录，仍严格检查正确实例目录；随后重新运行CI。打包回执保存在 .local/dev-build-receipt.json，产物不含Java和Fixture jar。
 
 ## 界面重构：2026-11-16
 - 用户要求客户端改为CustomTkinter；已移除桌面PySide6依赖，重写固定侧栏、本地启动首页、实例配置、云端连接与运行记录。
