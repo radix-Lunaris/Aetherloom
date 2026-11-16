@@ -61,7 +61,12 @@ def _log(message):
         from relay_log import log_line
         log_line(message)
     except Exception:
-        print(message, flush=True)
+        try:
+            print(message, flush=True)
+        except (UnicodeError, OSError):
+            # A Windows diagnostic console may use a non-Unicode encoding.
+            # Logging must not abort socket startup or a binding response.
+            pass
 
 
 STUN_MAGIC = b"\x21\x12\xa4\x42"

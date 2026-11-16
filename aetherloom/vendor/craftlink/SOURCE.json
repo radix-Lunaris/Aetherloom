@@ -25,7 +25,7 @@
     "source_path": "server/stun_server.py",
     "commit": "8178a3df0e73a88c41bab70574014b98b1c36ffe",
     "original_sha256": "4b420816b124a94e3e82ceb2aa859a736a57e12c5d2ce0ee84eb95d0cab9610d",
-    "vendored_sha256": "7128c5a96d6c416d3ac7237e7350252ac7407ea7304da595f4bfc8ff2d451886",
-    "patch": "Only replace relay_config import with local environment config. Binding, CHANGE-PORT, limiter and alternate-origin logic unchanged."
+    "vendored_sha256": "7dd83896a9c7c27c5958a2963c5cf3a2533fc30911c3c129b034eb7b2836b113",
+    "patch": "Redirect relay_config to local environment config; tolerate diagnostic-console logging failures. Wire/probe, limiter and alternate-origin behavior unchanged."
   }
 }

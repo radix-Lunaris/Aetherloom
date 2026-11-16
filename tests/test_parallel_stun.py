@@ -80,6 +80,10 @@ class ParallelTests(unittest.TestCase):
         finally:server.shutdown();server.server_close();thread.join(timeout=3)
 
 class StunWireTests(unittest.TestCase):
+    def test_console_encoding_failure_cannot_break_responder(self):
+        with patch('builtins.print',side_effect=UnicodeEncodeError('cp1252','就绪',0,1,'unrepresentable')):
+            stun_server._log('STUN socket 就绪')
+
     def test_real_udp_alternate_port_and_strict_filter_simulation(self):
         asyncio.run(self.exercise())
 
