@@ -834,7 +834,7 @@ class Window(ctk.CTk):
             else:
                 try:current_path=str(Path(self.values['java'].get()).resolve())
                 except (OSError,ValueError):current_path=''
-                selected=next((r for r in runtimes if r.path==current_path),None)
+                selected=next((r for r in runtimes if Path(r.path).resolve()==Path(current_path)),None)
                 if selected:
                     blocked=launch_compatibility(selected)
                     advice=compatibility(selected,required)

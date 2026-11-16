@@ -209,3 +209,5 @@ materialize尚未处理云端删除文件、精确镜像、空目录与完整恢
 - GUI resolve_java与launcher.prepare均移除主版本硬拦截；在线Host/Player沿用选定绑定，不自动覆盖手动选择。提示推荐差异但明确允许尝试。
 - 本机实际Java25执行声明Java17的最小游戏配置通过，含中文目录、继承参数与真实Java进程；不据此宣称所有Forge/Mod组合向下兼容。
 - 桌面检查已通过；核心回归进行中。本轮在experiment/java-agent迭代v0.4.0a2，仍为Prerelease，不合dev/main、不部署服务器。
+
+- 远端Windows桌面检查发现临时目录短路径/大小写别名导致手动选择提示匹配失败；改用规范化Path比较。v0.4.0a2候选未公开，保留源标签，不覆盖；修正后发行v0.4.0a3。51项本地回归通过，实际Microsoft Java25.0.3启动Java17配置通过。
