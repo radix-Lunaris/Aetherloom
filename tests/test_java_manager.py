@@ -8,7 +8,7 @@ import threading
 import unittest
 from unittest.mock import patch
 import zipfile
-from aetherloom.runtime import JavaRuntime,choose_java,required_java,find_runtimes,search_locations,_probe
+from aetherloom.runtime import JavaRuntime,choose_java,required_java,find_runtimes,search_locations,_probe,launch_compatibility,compatibility
 from aetherloom.java_download import install_runtime,extract_zip,trusted_url,release_package
 from aetherloom.shared_session import SharedSession
 
@@ -18,6 +18,14 @@ def java(path,major=17,version='17.0.21',bits=64,experimental=False):
 
 
 class JavaManagerTests(unittest.TestCase):
+    def test_manual_version_override_keeps_platform_checks(self):
+        for major in (8,11,17,21,25):
+            runtime=java('user-choice',major,experimental=True)
+            self.assertEqual(launch_compatibility(runtime),'')
+            self.assertTrue(compatibility(runtime,17))
+        self.assertTrue(launch_compatibility(java('x86',bits=32)))
+        self.assertTrue(launch_compatibility(JavaRuntime('arm','25',25,64,'aarch64')))
+
     def test_selects_stable_matching_major_and_architecture(self):
         candidates=[java('old',version='17.0.15'),java('current'),java('loom',25,'25-loom',experimental=True),java('newest',25,'25.0.3'),java('x86',version='17.0.99',bits=32)]
         self.assertEqual(choose_java(candidates,17).path,'current')

@@ -101,6 +101,9 @@ with tempfile.TemporaryDirectory() as d:
             window.choose_java_candidate(label);wait(window,lambda:window.pending==0)
             assert window.values['java_mode'].get()=='manual'
             assert window.values['java'].get()==wrong_java.path
+            with patch('aetherloom.gui.inspect_java',return_value=wrong_java):
+                assert window.resolve_java(str(root/'game'),'test-forge',wrong_java.path,'manual')==wrong_java.path
+            assert '仍使用所选' in window.java_hint.cget('text')
             def install(major,directory,progress,cancel,on_progress=None):
                 assert major==17 and directory==window.settings.path.parent/'java'
                 progress('test download progress');return installed.path

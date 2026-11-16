@@ -15,7 +15,7 @@ import customtkinter as ctk
 import asyncio
 from .launcher import launch, inside, game_uuid
 from . import __version__
-from .runtime import find_runtimes, required_java, choose_java, compatibility, inspect_java
+from .runtime import find_runtimes, required_java, choose_java, compatibility, inspect_java,launch_compatibility
 from .environment import describe, encode, validate
 from .diagnostics import setup, logger, safe, event
 
@@ -795,12 +795,12 @@ class Window(ctk.CTk):
 
     def resolve_java(self,root,version,current,mode):
         from .launcher import manifest
-        required=required_java(manifest(Path(root),version))
         if mode=='manual':
             info=inspect_java(current)
-            reason=compatibility(info,required)
-            if reason:raise ValueError(reason+'；请改用自动选择或下载推荐 Java')
+            reason=launch_compatibility(info)
+            if reason:raise ValueError(reason)
             return info.path
+        required=required_java(manifest(Path(root),version))
         runtimes=find_runtimes(root,self.java_directory,known=[current])
         best=choose_java(runtimes,required)
         if not best:raise ValueError(f'未找到稳定的64位 Java {required}，请在本地游戏点击“下载推荐 Java {required}”')
@@ -835,7 +835,11 @@ class Window(ctk.CTk):
                 try:current_path=str(Path(self.values['java'].get()).resolve())
                 except (OSError,ValueError):current_path=''
                 selected=next((r for r in runtimes if r.path==current_path),None)
-                hint='手动指定：'+(compatibility(selected,required) or '版本与架构匹配') if selected else f'手动指定路径未通过检测；此实例需要 Java {required} x64'
+                if selected:
+                    blocked=launch_compatibility(selected)
+                    advice=compatibility(selected,required)
+                    hint='手动指定：'+(blocked+'，无法启动' if blocked else (advice+'；仍使用所选 Java 尝试启动' if advice else '版本与架构匹配'))
+                else:hint=f'手动指定路径未通过检测；推荐 Java {required} x64，可自行选择其他可用版本'
             self.java_hint.configure(text=hint)
             chosen=next((label for label,path in self.java_choices.items() if path==self.values['java'].get()),'未找到匹配项')
             self.java_choice.set(chosen)

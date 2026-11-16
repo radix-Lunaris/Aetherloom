@@ -144,11 +144,10 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
             require(root / "assets" / "objects" / h[:2] / h)
     if missing:
         raise LaunchError("Missing files:\n" + "\n".join(missing))
-    from .runtime import inspect_java,required_java,compatibility
-    required=required_java(m)
+    from .runtime import inspect_java,launch_compatibility
     java_info=inspect_java(java,refresh=True)
-    reason=compatibility(java_info,required)
-    if reason:raise LaunchError(reason+'；请使用稳定的推荐版本或自动选择')
+    reason=launch_compatibility(java_info)
+    if reason:raise LaunchError(reason)
     native_dir = inside(run, ".aetherloom/natives/" + uuid.uuid4().hex)
     native_dir.mkdir(parents=True,exist_ok=True)
     cp = [java_path(p) for p in cp]

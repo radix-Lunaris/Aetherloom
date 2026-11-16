@@ -127,9 +127,16 @@ def inspect_java(path,refresh=False):
     return _probe(str(binary)) if refresh else _cached_probe(str(binary),signature)
 
 
-def compatibility(runtime,required):
+def launch_compatibility(runtime):
+    """Hard platform checks only; users may override Java version advice."""
     if runtime.bits!=64:return '需要64位 Java'
     if runtime.architecture not in ('amd64','x86_64','x64'):return '需要 x64 Java'
+    return ''
+
+
+def compatibility(runtime,required):
+    reason=launch_compatibility(runtime)
+    if reason:return reason
     if runtime.experimental:return '测试版／实验版，不自动选用'
     if runtime.major!=required:return f'此实例推荐 Java {required}，当前为 {runtime.major}'
     return ''

@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
+from dataclasses import replace
 from aetherloom.launcher import launch,LaunchError,prepare
 
 @unittest.skipUnless(shutil.which("javac") and shutil.which("jar"),"JDK required for process test")
@@ -33,6 +35,14 @@ class LaunchProcessTests(unittest.TestCase):
             code=process.wait(timeout=20)
             logs=list((run/".aetherloom/logs").glob("*.log"))
             self.assertEqual(code,0,"\\n".join(p.read_text(encoding="utf-8",errors="replace") for p in logs))
+            from aetherloom.runtime import inspect_java
+            # A valid Java25 selection must reach process creation even when
+            # the installed profile recommends Java17; use the real test VM
+            # with a different reported major to exercise this old hard gate.
+            selected=replace(inspect_java(java),major=25,version='25.0.3')
+            with patch('aetherloom.runtime.inspect_java',return_value=selected):
+                other=launch(root,"forge",java,"OfflineUser",run,512)
+                self.assertEqual(other.wait(timeout=20),0)
             self.assertIn("OfflineUser",(run/"started.txt").read_text(encoding="utf-8"))
             arguments=(run/"started.txt").read_text(encoding="utf-8").split('|')
             self.assertEqual(Path(arguments[arguments.index('--gameDir')+1]).resolve(),run.resolve())
@@ -43,7 +53,7 @@ class LaunchProcessTests(unittest.TestCase):
             self.assertIn(primary_name,(run/'jvm.txt').read_text(encoding='utf-8'))
             self.assertNotEqual(primary_name,'forge.jar')
             self.assertEqual(arguments[arguments.index('--separator')+1],__import__('os').sep)
-            self.assertEqual(len(list((run/".aetherloom/logs").glob("*.log"))),1)
+            self.assertEqual(len(list((run/".aetherloom/logs").glob("*.log"))),2)
             (base/(base_id+'.jar')).unlink()
             with self.assertRaises(LaunchError):
                 prepare(root,"forge",java,"OfflineUser",run)
