@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, room TEXT, parent TEXT,
             temp.unlink(missing_ok=True)
         return h
 
-    def _validate(self, manifest):
+    def _validate(self, manifest, check_blobs=True):
         for rel, entry in manifest.items():
             if not rel or rel in (".", "..") or "\\" in rel or ":" in rel or rel.startswith("/") or any(p in ('..', '.', '.aetherloom') or not p for p in rel.split('/')):
                 raise ValueError("Unsafe world path")
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, room TEXT, parent TEXT,
                 if off != pos or size <= 0 or len(h) != 64 or any(x not in "0123456789abcdef" for x in h):
                     raise ValueError("Invalid piece coverage")
                 blob = inside(self.root / "blobs", h[:2]+"/"+h)
-                if not blob.is_file() or blob.stat().st_size != size or hashlib.sha256(blob.read_bytes()).hexdigest() != h:
+                if check_blobs and (not blob.is_file() or blob.stat().st_size != size or hashlib.sha256(blob.read_bytes()).hexdigest() != h):
                     raise ValueError("Missing or corrupt blob")
                 pos += size
             if pos != entry["size"]:

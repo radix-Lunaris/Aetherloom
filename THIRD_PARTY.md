@@ -14,3 +14,5 @@ Gradle wrapper 8.8 is from the official Forge 1.20.1-47.4.22 MDK; Gradle is Apac
 Java management behavior reference (no HMCL source imported): HMCL JavaManager, JavaRuntime, GameJavaVersion and JavaVersionConstraint under https://github.com/HMCL-dev/HMCL . Original Python implementation remains in Aetherloom. Adoptium API reference: https://github.com/adoptium/api.adoptium.net/blob/main/docs/cookbook.adoc . Downloaded Temurin builds retain their GPLv2 with Classpath Exception terms and included third-party notices.
 
 Single-file client: embedded project/dependency notices are accessible in the desktop license viewer. The two helper JARs and BUILD_INFO.json are embedded resources; no separate copies are retained as workspace deliverables.
+
+Aetherloom Bridge: GPL-3.0-only; standalone source https://github.com/radix-Lunaris/Aetherloom-Bridge at 58703f093407c8c34750313c86c5e828746c1a0b. The vendored bridge/SOURCE.json pins source hashes. Supports Minecraft 1.20.1 / Forge 47.4.22; not a universal cross-version Mod. It does not include the separate MIT shared-playerdata helper.

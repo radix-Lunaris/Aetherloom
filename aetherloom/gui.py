@@ -68,6 +68,10 @@ class Window(ctk.CTk):
         self.rooms_busy=False
         self.refresh_failures=0
         self.network_rows={}
+        self.session_info={}
+        self.transfer_active=False
+        self.transfer_operation=''
+        self.transfer_percent=0.
         self.selected_room=self.settings.data.get("selected_room", "")
         self.profiles=self.settings.data.get("local_profiles", {})
         self.profile_key=None
@@ -126,20 +130,21 @@ class Window(ctk.CTk):
         self.body=ctk.CTkFrame(self,fg_color=BG,corner_radius=0)
         self.body.grid(row=0,column=1,sticky="nsew",padx=34,pady=28)
         self.body.grid_columnconfigure(0,weight=1)
-        self.body.grid_rowconfigure(1,weight=1)
+        self.body.grid_rowconfigure(2,weight=1)
         self.top=ctk.CTkFrame(self.body,fg_color="transparent")
         self.top.grid(row=0,column=0,sticky="ew",pady=(0,18))
         self.breadcrumb=self.label(self.top,"工作台  /  开始游戏",size=12,color=MUTED)
         self.breadcrumb.pack(side="left")
         self.connection=self.label(self.top,"●  本地模式",size=12,color=ACCENT)
         self.connection.pack(side="right")
+        self.build_transfer_progress()
         self.pages={}
         for name in self.nav:
             frame=ctk.CTkFrame(self.body,fg_color="transparent")
-            frame.grid(row=1,column=0,sticky="nsew")
+            frame.grid(row=2,column=0,sticky="nsew")
             self.pages[name]=frame
         self.notice=self.label(self.body,"就绪",size=12,color=MUTED)
-        self.notice.grid(row=2,column=0,sticky="w",pady=(12,0))
+        self.notice.grid(row=3,column=0,sticky="w",pady=(12,0))
         self.build_home()
         self.build_instance()
         self.build_cloud()
@@ -395,6 +400,7 @@ class Window(ctk.CTk):
         self.note(message,True)
 
     def start_game(self):
+        if self.transfer_active:self.note('请先完成当前传输任务',True);return
         if self.java_busy:self.note('Java 正在安装，请等待完成或取消下载',True);return
         if self.shared or self.launching or (self.process and self.process.poll() is None):return
         if not self.save():return
@@ -530,7 +536,7 @@ class Window(ctk.CTk):
         self.task(lambda:API(url,token)('/api/rooms'),done,failed)
 
     def create_room(self,existing=None):
-        if self.shared or (self.process and self.process.poll() is None):self.note('请先保存退出游戏',True);return
+        if self.transfer_active or self.shared or self.launching or (self.process and self.process.poll() is None):self.note('请先完成当前同步或保存退出游戏',True);return
         binding=self.current_binding()
         if not binding:return
         selected=filedialog.askdirectory(parent=self,title='选择要发布的世界（包含level.dat）',initialdir=str(Path(binding['run'])/'saves'))
@@ -544,6 +550,9 @@ class Window(ctk.CTk):
         if not name:return
         from .cloud import API,CloudWorld,LeaseGuard
         api=API(self.server_url,self.token)
+        self.begin_transfer('publish','准备发布新世界：'+name)
+        def progress(state):
+            self.events.put((lambda value:self.transfer_status(value),dict(state,operation='publish'),'notification'))
         def publish():
             binding['java']=self.resolve_java(binding['root'],binding['version'],binding['java'],binding.get('java_mode','manual'))
             if existing:
@@ -558,7 +567,7 @@ class Window(ctk.CTk):
                 from .shared_session import repair
                 from .launcher import offline_uuid
                 repair(world,binding['java'],game_uuid(binding['name'],binding.get('uuid')))
-                version=CloudWorld(api,self.settings.path.parent/'cache').upload(room,world,guard.lease,None)
+                version=CloudWorld(api,self.settings.path.parent/'cache',on_progress=progress).upload(room,world,guard.lease,None)
                 return room,version
             except Exception:
                 # Creation failed before any managed game launch; safe to release.
@@ -568,7 +577,8 @@ class Window(ctk.CTk):
             finally:guard.close()
         def done(result):
             self.bindings[result[0]]=binding;self.save();self.note('共同存档发布成功');self.rooms()
-        self.task(publish,done)
+        def failed(error):self.finish_transfer(False,error);self.note(error,True)
+        self.task(publish,done,failed)
 
     def current_binding(self):
         b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid','java_mode')}
@@ -703,6 +713,7 @@ class Window(ctk.CTk):
         self.cloud_task('/api/me',done,{'username' if choice=='改名' else 'password':value},method='PATCH')
 
     def play_room(self,room):
+        if self.transfer_active:self.note('请先完成当前传输任务',True);return
         if self.shared or self.launching or (self.process and self.process.poll() is None):self.note('已有游戏或共享任务运行，请先退出',True);return
         if room['id'] not in self.bindings:self.bind_room(room);return
         recovery=False
@@ -713,6 +724,7 @@ class Window(ctk.CTk):
         self.start_session(SharedSession,room,recovery)
 
     def inspect_room(self,room):
+        if self.transfer_active:self.note('请先完成当前传输任务',True);return
         if self.shared or self.launching or (self.process and self.process.poll() is None):self.note('请先退出游戏及当前任务',True);return
         if not messagebox.askyesno('离线恢复检查','保留旧Host原始存档，复制一份进行离线检查。\n不开LAN、不占公共Host。正常退出后上传不可变候选，等待Owner或实例管理员审批。\n检查副本需要额外磁盘空间，继续？',parent=self):return
         from .shared_session import OfflineInspection
@@ -724,6 +736,8 @@ class Window(ctk.CTk):
             def apply(_):
                 if kind=='process':self.started(value)
                 elif kind=='network':self.network_status(value)
+                elif kind=='session':self.session_status(value)
+                elif kind=='progress':self.transfer_status(value)
                 else:self.note(value)
             self.events.put((apply,None,'notification'))
         self.selected_room=room['id'];self.save()
@@ -731,13 +745,20 @@ class Window(ctk.CTk):
         session=self.shared
         self.network_rows.clear()
         for widget in self.network_list.winfo_children():widget.destroy()
+        self.network_empty=self.label(self.network_list,'正在准备会话；连接流在玩家实际接入后出现。',12,MUTED)
+        self.network_empty.pack(anchor='w',padx=16,pady=16)
+        self.session_status({'room':room['id'],'phase':'preflight','role':'待确认','mode':room.get('mode','AUTO'),'message':'在线启动已提交，正在核验环境和权威版本'})
+        self.begin_transfer('online','准备在线会话')
         self.launching=True;self.online.configure(state='disabled',text='在线准备中…');self.start.configure(state='disabled')
         def finished(_):
             self.shared=None;self.launching=False
+            if self.transfer_active:self.finish_transfer(self.session_info.get('phase')=='complete','会话已完成' if self.session_info.get('phase')=='complete' else '会话结束，未完成的同步未记为成功')
             self.online.configure(state='normal',text='在线启动   →')
             self.start.configure(state='normal' if not self.process or self.process.poll() is not None else 'disabled',text='离线启动   →')
             self.rooms()
-        def failed(error):finished(None);self.note(error,True)
+        def failed(error):
+            self.session_status(dict(self.session_info,phase='failed',message=error))
+            self.finish_transfer(False,error);finished(None);self.note(error,True)
         self.task(lambda:asyncio.run(session.run()),finished,failed)
 
     def remember_profile(self):
@@ -827,7 +848,7 @@ class Window(ctk.CTk):
     def download_java(self):
         if self.java_busy:
             self.java_download_cancel.set();self.java_download_button.configure(text='正在取消…',state='disabled');return
-        if self.shared or self.launching or self.process and self.process.poll() is None:
+        if self.transfer_active or self.shared or self.launching or self.process and self.process.poll() is None:
             self.note('请先结束游戏及共享会话，再安装运行时',True);return
         root,version=self.values['root'].get(),self.values['version'].get()
         try:
@@ -835,12 +856,13 @@ class Window(ctk.CTk):
             required=required_java(manifest(Path(root),version))
         except (ValueError,OSError,KeyError) as e:self.note(str(e),True);return
         cancel=threading.Event();self.java_download_cancel=cancel;self.java_busy=True
+        self.begin_transfer('java',f'准备下载推荐 Java {required}')
         self.java_download_button.configure(text='取消 Java 下载')
         def progress(text):
             self.events.put((lambda message:self.note(message),text,'notification'))
         def install():
             from .java_download import install_runtime
-            return install_runtime(required,self.java_directory,progress=progress,cancel=cancel)
+            return install_runtime(required,self.java_directory,progress=progress,cancel=cancel,on_progress=lambda state:self.events.put((lambda value:self.transfer_status(value),state,'notification')))
         def complete():
             self.java_busy=False;self.java_download_cancel=None
             self.java_download_button.configure(state='normal',text=f'下载推荐 Java {required}')
@@ -848,8 +870,9 @@ class Window(ctk.CTk):
             complete()
             if root==self.values['root'].get() and version==self.values['version'].get():
                 self.values['java_mode'].set('auto');self.values['java'].set(path);self.save();self.detect_java()
+            self.finish_transfer(True,'Java 校验与安装完成')
             self.note('Java 安装完成；未修改系统环境变量，可直接启动游戏')
-        def failed(error):complete();self.note(error,True)
+        def failed(error):complete();self.finish_transfer(False,error);self.note(error,True)
         self.task(install,done,failed)
 
     def select_room(self,room):
@@ -866,14 +889,67 @@ class Window(ctk.CTk):
         if self.token and not self.login_busy:self.rooms()
         self.after((5000 if self.page in ('cloud','home') else 15000)*2**self.refresh_failures,self.auto_refresh)
 
+    def build_transfer_progress(self):
+        panel=self.card(self.body);panel.grid(row=1,column=0,sticky='ew',pady=(0,12));panel.grid_columnconfigure(0,weight=1)
+        self.transfer_label=self.label(panel,'暂无同步任务',12,MUTED)
+        self.transfer_label.grid(row=0,column=0,sticky='w',padx=12,pady=(8,3))
+        self.transfer_number=self.label(panel,'—',12,ACCENT)
+        self.transfer_number.grid(row=0,column=1,sticky='e',padx=12,pady=(8,3))
+        self.transfer_bar=ctk.CTkProgressBar(panel,height=8,progress_color=PRIMARY,fg_color=BORDER)
+        self.transfer_bar.grid(row=1,column=0,columnspan=2,sticky='ew',padx=12,pady=(0,10));self.transfer_bar.set(0)
+
+    def begin_transfer(self,operation,message):
+        self.transfer_operation=operation;self.transfer_active=True;self.transfer_percent=0.
+        self.transfer_label.configure(text=message,text_color=MUTED)
+        self.transfer_number.configure(text='准备中')
+        self.transfer_bar.configure(mode='indeterminate',progress_color=PRIMARY);self.transfer_bar.start()
+
+    def transfer_status(self,state):
+        self.transfer_operation=state.get('operation','sync')
+        percent=state.get('percent')
+        if percent is None:return
+        self.transfer_bar.stop();self.transfer_bar.configure(mode='determinate',progress_color=PRIMARY)
+        self.transfer_percent=max(0.,min(100.,float(percent)));self.transfer_bar.set(self.transfer_percent/100)
+        self.transfer_active=state.get('stage')!='complete'
+        title={'publish':'发布世界','upload':'上传世界','download':'下载世界','recovery':'恢复候选','java':'Java下载','online':'在线准备'}.get(self.transfer_operation,'同步')
+        detail=state.get('message') or state.get('stage','')
+        total=state.get('total',0);done=state.get('done',0)
+        if total and state.get('unit')=='bytes':detail+=f' · {done/1024**2:.1f} / {total/1024**2:.1f} MiB'
+        elif total:detail+=f' · {done} / {total}'
+        self.transfer_label.configure(text=(title+' · '+safe(detail))[:105],text_color=MUTED)
+        self.transfer_number.configure(text=f'{self.transfer_percent:.1f}%')
+
+    def finish_transfer(self,success,message):
+        self.transfer_bar.stop();self.transfer_bar.configure(mode='determinate',progress_color=PRIMARY if success else '#D48B79')
+        if success:self.transfer_percent=100.
+        self.transfer_bar.set(self.transfer_percent/100);self.transfer_active=False
+        self.transfer_label.configure(text=safe(message)[:105],text_color=MUTED if success else '#F0AF9C')
+        self.transfer_number.configure(text='100.0%' if success else f'未完成 · {self.transfer_percent:.1f}%')
+
+    def session_status(self,state):
+        self.session_info=dict(state)
+        names={'created':'待启动','preflight':'校验环境／权威版本','claiming':'申请Host租约','syncing':'同步存档','connecting':'建立代理','loading':'游戏加载中','ready':'Host就绪／等待玩家','active':'运行中','saving':'保存与断开','uploading':'最终上传','inspection':'离线检查','complete':'正常完成','ended':'已结束','failed':'失败'}
+        room=state.get('room','');item=self.room_items.get(room,{})
+        details=f"实例：{item.get('name',room)}\n角色：{state.get('role','待确认')} · 策略：{state.get('mode','AUTO')} · 状态：{names.get(state.get('phase'),state.get('phase',''))}"
+        details+=f"\n代次：{state.get('epoch') if state.get('epoch') is not None else '待确认'} · LAN端口：{state.get('lan_port') or '尚未就绪'} · 已就绪对端：{state.get('players',0)}"
+        if state.get('message'):details+='\n'+safe(state['message'])
+        self.network_summary.configure(text=details,text_color='#F0AF9C' if state.get('phase')=='failed' else TEXT)
+        event('session.state',**{key:state[key] for key in ('room','role','phase','mode','epoch','players','message') if key in state})
+        if self.transfer_operation=='online' and state.get('phase') in ('ready','active'):
+            self.finish_transfer(True,'在线会话已就绪')
+
     def build_network(self):
         p=self.pages['network']
         self.heading(p,'联机状态','显示实际流状态、P2P 打洞与中继回退；控制通道不等于游戏直连。')
+        self.network_summary=self.label(p,'尚未启动在线会话。点击在线启动后，将持续显示角色、阶段和LAN状态。',13,MUTED,wraplength=690,justify='left')
+        self.network_summary.pack(fill='x',pady=(0,14))
         self.network_list=ctk.CTkScrollableFrame(p,fg_color=CARD)
         self.network_list.pack(fill='both',expand=True)
-        self.label(self.network_list,'尚未启动在线会话',13,MUTED).pack(anchor='w',padx=16,pady=16)
+        self.network_empty=self.label(self.network_list,'尚无连接流。Host等待玩家时无需建立到自身的隧道。',13,MUTED)
+        self.network_empty.pack(anchor='w',padx=16,pady=16)
 
     def network_status(self,state):
+        if self.network_empty.winfo_exists():self.network_empty.pack_forget()
         key=state.get('session_id','network')
         display={k:state[k] for k in ('peer','channel','mode','active_path','relay_ready','direct_ready','switch_phase','last_reason','relay_rtt_ms','direct_rtt_ms','direct_endpoint','attempt','stage') if k in state}
         event('network.state',stream=key,**display)

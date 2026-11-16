@@ -1,21 +1,13 @@
-# Aetherloom v0.2.1
+# Aetherloom v0.3.0
 
-修复部分已安装 Forge 整合包在启动前报 `Unsupported variable: primary_jar_name`。
+修复在线启动后联机状态空白，增加顶部任务百分比，公开独立 Bridge 源码。
 
-## 修复内容
+- 联机状态持续展示当前实例、角色、会话代次、加载／同步／保存阶段、LAN端口和就绪对端数量。没有玩家接入时显示等待状态；隧道行继续展示真实中继、打洞、直连及回退信息。
+- 发布世界、增量上传／下载、恢复候选和Java安装提供百分比。总进度按阶段分配，阶段内按已处理字节／文件计量，并显示当前阶段；不是剩余时间估计。提交／替换成功前最多99%，失败不误报完成。
+- SHA-256分块同步保持缺失块增量传输；没有改变的文件不替换。游戏运行中不新增周期扫描或上传。
+- 大整合包就绪等待默认15分钟，期间继续Host续租及失效保护。
+- Bridge独立仓库：https://github.com/radix-Lunaris/Aetherloom-Bridge ，GPLv3。当前完整Hop支持Minecraft1.20.1＋Forge47.4.22；不是跨所有版本通用Mod，架构保持不变。
 
-- 支持启动元数据中的 `primary_jar_name`、`primary_jar`、`libraries_directory`、`file_separator`。
-- 主JAR来自实际版本继承／jar指向，文件名与Java使用的classpath路径一致；兼容Windows短路径、中文和含空格名称，不使用界面版本昵称猜测。
-- 不修改游戏版本JSON，不调用其他启动器，不把未知变量静默置空。
+验证：48项自动化回归、桌面交互与实际窗口布局检查通过；本地真实Forge双进程验证Host等待、Player自动加入、退出不上传及Host最终上传成功。独立Bridge本地与GitHub构建通过，正常发行JAR不含测试模组。
 
-## 验证
-
-- 在用户当前DeceasedCraft中复现原错误；修复后DeceasedCraft和Construct Technological Innovation完整参数校验通过。
-- 45项核心回归通过；真实Java进程验证JVM ignoreList、主JAR完整路径、中文含空格名称和父子版本名不同。
-- 大型整合包的完整主菜单加载以实际验证记录为准，参数校验通过不代表所有Mod组合已验收。
-
-## 下载与使用
-
-直接下载新的 `Aetherloom.exe`，退出旧客户端后替换；已有账号、版本配置和UUID设置保留。
-
-工作区仍只在release保留EXE、Aetherloom-Server.tar.gz和SHA256SUMS.txt，无客户端ZIP或dist副本。Java自动选择、官方校验下载和其他v0.2.0功能继续保留。本次仅客户端参数修复，现有服务端无需重新部署；历史发行不覆盖。
+退出旧客户端后替换 `Aetherloom.exe`。用户配置、UUID和已有游戏目录保留。Java不捆绑；无需更换现有服务端。本轮不部署ECS、不合并main。双电脑跨NAT及更多版本仍需独立验收。

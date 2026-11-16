@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/radix-Lunaris/Aetherloom-Bridge",
+  "commit": "58703f093407c8c34750313c86c5e828746c1a0b",
+  "license": "GPL-3.0-only",
+  "integration": "Vendored source; no submodule or external runtime download required.",
+  "files": {
+    "src/main/java/online/superyk7hero/aetherloom/Bridge.java": "3ee3c9d7432f3f76f51767720afcc3b080cc6bca5881cb58251354800c4b695a",
+    "src/main/resources/pack.mcmeta": "d530066546e3335ab7a6ea50cbc151f418b6ac49042aa9e0f0fac46f83101b22",
+    "src/main/resources/META-INF/mods.toml": "e37fa6c74a2318ac52052b96f7f3449dc60a36b36f19d7147c0a20a17640a6a3",
+    "src/test/java/online/superyk7hero/aetherloom/fixture/FixtureMod.java": "f4469df208db2cdf1b08f76015f091044c49470f23ea5721ff1fa78a0aec7b47",
+    "src/test/resources/pack.mcmeta": "b2dd62d4bd9b20415af74e109470cd8b698bf0465a5b4b6d514327a0606426a0",
+    "src/test/resources/META-INF/mods.toml": "5e0d7d1be12ffac62bd09507b24ab7b1e3048c1fcea986812a4364c070ee419e"
+  }
+}

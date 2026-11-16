@@ -12,6 +12,7 @@ New-Item -ItemType Directory -Force $licensesRoot | Out-Null
 Copy-Item LICENSE,THIRD_PARTY.md -Destination $licensesRoot
 Copy-Item playerdata/LICENSE.shared-playerdata -Destination $licensesRoot
 Copy-Item aetherloom/vendor/craftlink/SOURCE.json -Destination (Join-Path $licensesRoot 'CraftLink-SOURCE.json')
+Copy-Item bridge/SOURCE.json -Destination (Join-Path $licensesRoot 'Aetherloom-Bridge-SOURCE.json')
 foreach ($package in @('customtkinter-5.2.2.dist-info','websockets-15.0.1.dist-info','pillow-13.0.0.dist-info')) {
     $packageRoot = Join-Path $projectRoot ".venv/Lib/site-packages/$package"
     foreach ($notice in (Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Where-Object { $_.Name -match 'LICENSE|COPYING|METADATA' })) {

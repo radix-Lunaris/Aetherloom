@@ -13,6 +13,7 @@ from urllib.parse import urlencode,urlsplit
 import uuid
 import zipfile
 from .runtime import inspect_java,compatibility
+from .transfer import TransferProgress
 
 MAX_ARCHIVE=512*1024**2
 MAX_EXPANDED=1536*1024**2
@@ -70,7 +71,7 @@ def check_cancel(cancel):
     if cancel.is_set():raise ValueError('Java 下载已取消')
 
 
-def extract_zip(archive,output,cancel):
+def extract_zip(archive,output,cancel,progress=None):
     """Validate ALL entries before writing. No links, escapes or overwrites."""
     output=Path(output).resolve();total=0;targets=set();entries=[]
     with zipfile.ZipFile(archive) as z:
@@ -92,18 +93,22 @@ def extract_zip(archive,output,cancel):
             if total>MAX_EXPANDED:raise ValueError('Java 解压大小超限')
             entries.append((entry,destination))
         if shutil.disk_usage(output).free<total+64*1024**2:raise ValueError('磁盘空间不足，无法安装 Java')
+        done=0
+        if progress:progress(0,total)
         for entry,destination in entries:
             check_cancel(cancel)
             if entry.is_dir():destination.mkdir(parents=True,exist_ok=True);continue
             destination.parent.mkdir(parents=True,exist_ok=True)
             with z.open(entry) as source,destination.open('xb') as target:
                 while chunk:=source.read(1024**2):
-                    check_cancel(cancel);target.write(chunk)
+                    check_cancel(cancel);target.write(chunk);done+=len(chunk)
+                    if progress:progress(done,total)
 
 
-def install_runtime(major,directory,progress=None,cancel=None,open_request=open_url,package=None,probe=inspect_java):
+def install_runtime(major,directory,progress=None,cancel=None,open_request=open_url,package=None,probe=inspect_java,on_progress=None):
     if not WINDOWS_RUNTIME_INSTALL:raise ValueError('一键安装目前仅提供 Windows x64')
     progress=progress or (lambda text:None);cancel=cancel or threading.Event()
+    report=TransferProgress('java',on_progress);report.emit('metadata',message='查询官方Java发行版')
     progress(f'正在查询官方 Temurin Java {major} Windows x64 发行版')
     package=package or release_package(major,open_request)
     if package['major']!=major:raise ValueError('Java 下载主版本不匹配')
@@ -114,7 +119,7 @@ def install_runtime(major,directory,progress=None,cancel=None,open_request=open_
     if target.exists():
         for path in target.glob('*/bin/java.exe'):
             info=probe(path)
-            if not compatibility(info,major):return str(path)
+            if not compatibility(info,major):report.finish('已有运行时校验通过');return str(path)
         raise ValueError('已有 Java 缓存不完整，请手动检查缓存目录')
     if shutil.disk_usage(root).free<package['size']*4+128*1024**2:raise ValueError('磁盘空间不足，Java 下载尚未开始')
     stage=root/('.install-'+uuid.uuid4().hex);stage.mkdir()
@@ -125,23 +130,27 @@ def install_runtime(major,directory,progress=None,cancel=None,open_request=open_
                 check_cancel(cancel);received+=len(chunk)
                 if received>package['size'] or received>MAX_ARCHIVE:raise ValueError('Java 下载大小超限')
                 digest.update(chunk);output.write(chunk)
+                report.emit('transfer',received,package['size'],0,85,message='下载官方Java')
                 percent=int(received*100/package['size'])
                 if percent!=last:
                     progress(f'下载 Java {major}：{received/1024**2:.1f} / {package["size"]/1024**2:.1f} MiB（{percent}%）');last=percent
         check_cancel(cancel)
+        report.emit('verify',1,1,85,90,'steps','验证SHA-256与下载大小')
         if received!=package['size'] or digest.hexdigest()!=package['sha256']:
             raise ValueError('Java SHA-256 或大小校验失败，未安装')
         progress('Java 下载校验通过，正在解压到独立运行时目录')
-        unpacked=stage/'unpacked';unpacked.mkdir();extract_zip(archive,unpacked,cancel)
+        unpacked=stage/'unpacked';unpacked.mkdir();extract_zip(archive,unpacked,cancel,progress=lambda done,total:report.emit('assemble',done,total,90,97,message='安全解压Java'))
         candidates=list(unpacked.glob('*/bin/java.exe'))
         if len(candidates)!=1:raise ValueError('Java 归档布局异常')
         info=probe(candidates[0])
+        report.emit('probe',1,1,97,99,'steps','检查实际Java版本与架构')
         reason=compatibility(info,major)
         if reason:raise ValueError('下载后的 Java 检查失败：'+reason)
         (unpacked/'AETHERLOOM_DOWNLOAD.json').write_text(json.dumps(package,indent=2),encoding='utf-8')
         relative=candidates[0].relative_to(unpacked)
         check_cancel(cancel)
         unpacked.rename(target)
+        report.finish('Java校验与安装完成')
         progress(f'Temurin Java {major} 安装完成，已保留原始许可文件')
         return str(target/relative)
     finally:

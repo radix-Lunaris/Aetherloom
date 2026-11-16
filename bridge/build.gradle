@@ -18,3 +18,6 @@ tasks.register('fixtureJar', Jar) {
 }
 reobf { fixtureJar {} }
 fixtureJar.finalizedBy('reobfFixtureJar')
+
+// Keep the GPL notice inside the normal Mod artifact.
+jar { from("LICENSE") { into("META-INF") } }

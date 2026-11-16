@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory() as d:
             window.choose_java_candidate(label);wait(window,lambda:window.pending==0)
             assert window.values['java_mode'].get()=='manual'
             assert window.values['java'].get()==wrong_java.path
-            def install(major,directory,progress,cancel):
+            def install(major,directory,progress,cancel,on_progress=None):
                 assert major==17 and directory==window.settings.path.parent/'java'
                 progress('test download progress');return installed.path
             discovery.return_value=[old_java,wrong_java,installed]
@@ -105,11 +105,24 @@ with tempfile.TemporaryDirectory() as d:
                 window.download_java();wait(window,lambda:window.pending==0)
                 assert window.values['java_mode'].get()=='auto'
                 assert window.values['java'].get()==installed.path
-            def cancelling(major,directory,progress,cancel):
+            def cancelling(major,directory,progress,cancel,on_progress=None):
                 assert cancel.wait(5);raise ValueError('Java download cancelled')
             with patch('aetherloom.java_download.install_runtime',side_effect=cancelling):
                 window.download_java();window.download_java();wait(window,lambda:window.pending==0)
                 assert not window.java_busy and window.values['java'].get()==installed.path
+        window.begin_transfer('online','准备在线会话')
+        window.session_status({'room':'test-room','role':'Host','phase':'ready','mode':'AUTO','epoch':3,'lan_port':25565,'players':0,'message':'等待其他玩家连接'})
+        window.show('network');window.update()
+        assert 'Host就绪' in window.network_summary.cget('text')
+        assert '25565' in window.network_summary.cget('text') and '已就绪对端：0' in window.network_summary.cget('text')
+        assert window.network_empty.winfo_exists() and window.network_empty.winfo_manager()=='pack'
+        assert not window.network_rows and not window.transfer_active
+        window.transfer_status({'operation':'upload','stage':'transfer','percent':63,'done':2,'total':4,'unit':'bytes'})
+        assert window.transfer_number.cget('text')=='63.0%'
+        window.finish_transfer(False,'模拟上传失败')
+        assert window.transfer_percent==63 and '未完成' in window.transfer_number.cget('text')
+        window.transfer_status({'operation':'upload','stage':'complete','percent':100,'message':'提交成功'})
+        assert not window.transfer_active and window.transfer_bar.get()==1
         for page in ('home','instance','cloud','network','logs'):window.show(page);window.update()
         before=set(window.winfo_children());window.show_licenses();window.update()
         dialog=next(widget for widget in window.winfo_children() if widget not in before and isinstance(widget,ctk.CTkToplevel))
