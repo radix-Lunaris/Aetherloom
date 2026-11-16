@@ -1,5 +1,13 @@
 # 实施检查点
 
+## 2026-11-16 整合包 primary_jar_name 热修复
+- 已在用户当前DeceasedCraft版本预检查中复现Unsupported variable: primary_jar_name；另一整合包Construct Technological Innovation也引用该变量。
+- 核对实际版本配置与HMCL公开变量语义，只补本项目参数映射，不导入启动器源码。primary_jar指向最终继承／jar指定的实际客户端文件；primary_jar_name取Java实际classpath使用的路径文件名（含Windows短路径情况），不按界面版本昵称猜测。
+- 同时支持primary_jar、libraries_directory、file_separator；未知变量仍严格报错，不替换为空掩盖后续错误。
+- 已增加真实Java进程回归，覆盖继承版本主JAR与子版本名不同、中文目录、JVM ignoreList和完整路径。正在复核实际整合包启动，随后按唯一release目录规则发行v0.2.1。
+- 修复后两个实际整合包完整参数检查通过，45项核心回归通过；主JAR名进一步改为中文含空格的真实Java专项回归也通过。
+- DeceasedCraft首次隔离冷启动已创建游戏窗口、进入Forge／Mod加载；4GiB测试在240秒时限内未完成渲染，未标记主菜单通过。已清理测试派生CrashAssistant及副本；按用户配置12900MiB继续复测，不加载原世界。
+
 ## 唯一release目录与v0.2.0发行（用户追加）
 - 用户明确要求：不再另打ZIP，所有构建产物在release独一份，每轮版本迭代发布一次GitHub Release。已落入项目AGENTS.md，后续执行沿用。
 - 当前改为单文件Aetherloom.exe（内嵌JAR／许可）、单份Docker tar.gz和SHA256SUMS；辅助模块在_MEIPASS/assets访问。许可入口在“运行记录→许可与来源”。

@@ -17,15 +17,16 @@ class LaunchProcessTests(unittest.TestCase):
             run=root/"versions"/"forge"
             run.mkdir(parents=True)
             source=Path(d)/"Main.java"
-            source.write_text('public class Main { public static void main(String[] args) throws Exception { java.nio.file.Files.writeString(java.nio.file.Path.of("started.txt"), String.join("|",args)); }}',encoding="utf-8")
+            source.write_text('public class Main { public static void main(String[] args) throws Exception { java.nio.file.Files.writeString(java.nio.file.Path.of("started.txt"), String.join("|",args)); java.nio.file.Files.writeString(java.nio.file.Path.of("jvm.txt"), System.getProperty("ignoreList")); }}',encoding="utf-8")
             subprocess.run(["javac","--release","17",str(source)],check=True,capture_output=True)
-            base=root/"versions/base";base.mkdir()
-            with zipfile.ZipFile(base/"base.jar","w") as archive:
+            base_id='原版游戏 Primary'
+            base=root/'versions'/base_id;base.mkdir()
+            with zipfile.ZipFile(base/(base_id+'.jar'),"w") as archive:
                 archive.write(Path(d)/"Main.class","Main.class")
-            (base/"base.json").write_text(json.dumps({"id":"base","mainClass":"Main",
+            (base/(base_id+'.json')).write_text(json.dumps({"id":base_id,"mainClass":"Main",
                 "assetIndex":{"id":"test"},"javaVersion":{"majorVersion":17},
-                "arguments":{"game":["--username","${auth_player_name}","--gameDir","${game_directory}","--clientId","${clientid}","--xuid","${auth_xuid}"]}}),encoding="utf-8")
-            (run/"forge.json").write_text(json.dumps({"id":"forge","inheritsFrom":"base"}),encoding="utf-8")
+                "arguments":{"jvm":["-DignoreList=forge-,${version_name}.jar,${primary_jar_name}"],"game":["--username","${auth_player_name}","--gameDir","${game_directory}","--clientId","${clientid}","--xuid","${auth_xuid}","--primaryJar","${primary_jar}","--primaryName","${primary_jar_name}","--libraries","${libraries_directory}","--separator","${file_separator}"]}}),encoding="utf-8")
+            (run/"forge.json").write_text(json.dumps({"id":"forge","inheritsFrom":base_id}),encoding="utf-8")
             indexes=root/"assets/indexes";indexes.mkdir(parents=True)
             (indexes/"test.json").write_text('{"objects":{}}')
             process=launch(root,"forge",java,"OfflineUser",run,512)
@@ -35,8 +36,15 @@ class LaunchProcessTests(unittest.TestCase):
             self.assertIn("OfflineUser",(run/"started.txt").read_text(encoding="utf-8"))
             arguments=(run/"started.txt").read_text(encoding="utf-8").split('|')
             self.assertEqual(Path(arguments[arguments.index('--gameDir')+1]).resolve(),run.resolve())
+            primary=Path(arguments[arguments.index('--primaryJar')+1])
+            primary_name=arguments[arguments.index('--primaryName')+1]
+            self.assertTrue(primary.samefile(base/(base_id+'.jar')))
+            self.assertEqual(primary_name,primary.name)
+            self.assertIn(primary_name,(run/'jvm.txt').read_text(encoding='utf-8'))
+            self.assertNotEqual(primary_name,'forge.jar')
+            self.assertEqual(arguments[arguments.index('--separator')+1],__import__('os').sep)
             self.assertEqual(len(list((run/".aetherloom/logs").glob("*.log"))),1)
-            (base/"base.jar").unlink()
+            (base/(base_id+'.jar')).unlink()
             with self.assertRaises(LaunchError):
                 prepare(root,"forge",java,"OfflineUser",run)
 

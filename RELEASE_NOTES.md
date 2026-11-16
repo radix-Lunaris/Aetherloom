@@ -1,33 +1,21 @@
-# Aetherloom v0.2.0
+# Aetherloom v0.2.1
 
-离线个人启动和在线共享世界分开；增加可选UUID、Java自动管理、联机诊断与无感刷新。客户端改为独立单文件EXE。
+修复部分已安装 Forge 整合包在启动前报 `Unsupported variable: primary_jar_name`。
+
+## 修复内容
+
+- 支持启动元数据中的 `primary_jar_name`、`primary_jar`、`libraries_directory`、`file_separator`。
+- 主JAR来自实际版本继承／jar指向，文件名与Java使用的classpath路径一致；兼容Windows短路径、中文和含空格名称，不使用界面版本昵称猜测。
+- 不修改游戏版本JSON，不调用其他启动器，不把未知变量静默置空。
+
+## 验证
+
+- 在用户当前DeceasedCraft中复现原错误；修复后DeceasedCraft和Construct Technological Innovation完整参数校验通过。
+- 45项核心回归通过；真实Java进程验证JVM ignoreList、主JAR完整路径、中文含空格名称和父子版本名不同。
+- 大型整合包的完整主菜单加载以实际验证记录为准，参数校验通过不代表所有Mod组合已验收。
 
 ## 下载与使用
 
-- Windows x64：下载 `Aetherloom.exe` 直接运行，不需要解压依赖目录；不捆绑Java。
-- 自行准备完整Minecraft目录，绑定后自动发现合适的Java。缺失时点“下载推荐Java”；从Temurin官方获取并校验SHA-256。仍不下载游戏文件或导入整合包。
-- Docker服务端：下载 `Aetherloom-Server.tar.gz`，按其中DEPLOY.md部署。MySQL保持独立容器，公网使用HTTPS47192，面板38443加原安全路径。
-- 使用SHA256SUMS.txt核对附件；工作区产物只保留在release，不另生成客户端ZIP。
+直接下载新的 `Aetherloom.exe`，退出旧客户端后替换；已有账号、版本配置和UUID设置保留。
 
-## 本轮变化
-
-- 首页“离线启动”不要求软件登录，进入游戏主菜单，由玩家自己选择游戏方式。
-- 首页“在线启动”显示选中房间，校验权威版本后获取Host租约或加入现有Host；Player不下载共同世界。在线保存／离开后关闭游戏窗口，Host确认保存和文件锁释放后增量提交。
-- 可选自定义UUID，支持旧账号UUID，留空按离线名称生成；Forge入服协商保持身份。修改后须重新绑定房间，不自动合并角色数据。
-- Java自动发现注册表、PATH／JAVA_HOME、系统厂商目录、用户.jdks和游戏／启动器运行时目录；自动选择稳定64位匹配主版本，可手动指定，按实例保存。
-- 一键下载、SHA-256／大小／实际版本验证、可取消和原子安装；不改系统环境变量，不覆盖用户现有Java。
-- 列表与面板自动刷新并保留滚动和编辑状态；所有权转移和成员管理使用数据库账号下拉。
-- 联机状态展示实际AUTO／中继／直连、打洞轮次、验证／回退与RTT；详细轮转日志辅助排障。共享房间拒绝绑定明确不匹配的版本。
-- 修复AUTO结束／取消时的清理竞争，旧房间Java路径迁移为自动选择。单文件内嵌许可可在“运行记录→许可与来源”查看。
-
-## 验证与边界
-
-- 44项核心回归通过；桌面自动／手动Java选择、下载／取消、版本切换、列表滚动和表单状态通过。
-- 实际发现HMCL17.0.15及Java21／25／Loom；1.20.1优先Java17。官方Temurin17.0.21下载与校验通过，两套Java均完成真实游戏LAN、正常保存、文件锁释放及退出。
-- 自定义UUID的Host和Player实测通过；重复加入恢复原有物品栏与经验，Player不上传，Host正常提交。
-- 真实完整Hop支持Windows x64、Minecraft1.20.1／Forge47.4.22。双进程实测在同一电脑隔离目录进行，尚未替代两台不同电脑／NAT的验收。
-- P2P为认证单端点尝试，不包含CraftLink全部对称NAT扫描策略；AUTO失败保留中继。其他Mod组合仍需验证。
-- 不做运行中定期存档扫描／上传、无缝Host迁移或自动合并世界。崩溃进度仍经候选审批恢复。
-- 线上服务器已部署ec22e7c，兼容本轮客户端；本次Java／打包功能不需要重复部署服务器。
-
-对应源码与说明随标签公开；v0.1.0历史Release不覆盖。
+工作区仍只在release保留EXE、Aetherloom-Server.tar.gz和SHA256SUMS.txt，无客户端ZIP或dist副本。Java自动选择、官方校验下载和其他v0.2.0功能继续保留。本次仅客户端参数修复，现有服务端无需重新部署；历史发行不覆盖。

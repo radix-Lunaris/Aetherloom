@@ -34,3 +34,9 @@
 - 客户端改为单文件EXE，内嵌辅助JAR和许可；从_MEIPASS/assets访问资源，提供许可查看入口。服务端用单份tar.gz适配Ubuntu上传。没有新的捆绑Java。
 - 完整构建只保留EXE、服务器tar.gz和校验和，删除已确认在项目内的旧dist、编译目录和测试Mod副本；不触碰世界或依赖缓存。
 - 本轮版本为v0.2.0，从dev的已验证提交发布；不覆盖v0.1.0，不擅自合并main，不随发行部署服务器。发布前校验来源、远端dev／标签、CI及上传后的摘要。
+
+
+## 2026-11-16 整合包主JAR参数
+- 用户实际DeceasedCraft包含其他启动器写入的primary_jar_name参数。按公开变量语义独立兼容，不导入启动器源码。
+- 主JAR路径与现有classpath共用已校验的文件；名称取Java可见路径的basename，避免继承版本／jar重定向和Windows短文件名造成ignoreList不一致。
+- 补全同类primary_jar、libraries_directory和file_separator；继续严格拒绝未知变量，不重写用户版本JSON。

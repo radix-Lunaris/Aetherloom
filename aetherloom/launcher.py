@@ -132,7 +132,8 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
                 raise LaunchError("Missing native descriptor")
             natives.append((require(inside(root / "libraries", item["path"])), lib.get("extract", {}).get("exclude", [])))
     client = m["_client"]
-    cp.append(str(require(inside(root, f"versions/{client}/{client}.jar"))))
+    primary_jar = require(inside(root, f"versions/{client}/{client}.jar"))
+    cp.append(str(primary_jar))
     asset_id = m.get("assetIndex", {}).get("id", m.get("assets", "legacy"))
     index = require(inside(root, f"assets/indexes/{asset_id}.json"))
     if index.is_file():
@@ -151,13 +152,17 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
     native_dir = inside(run, ".aetherloom/natives/" + uuid.uuid4().hex)
     native_dir.mkdir(parents=True,exist_ok=True)
     cp = [java_path(p) for p in cp]
+    primary_java = java_path(primary_jar)
+    libraries_java = java_path(root / 'libraries')
     variables = dict(auth_player_name=name, auth_uuid=identity, auth_access_token="0",
         clientid="", auth_xuid="", auth_session="0", xuid="",
         resolution_width="1280", resolution_height="720",
         user_type="legacy", user_properties="{}", version_name=version, version_type=m.get("type", "release"),
         game_directory=java_path(run), assets_root=java_path(root / "assets"), assets_index_name=asset_id,
         natives_directory=java_path(native_dir), launcher_name="Aetherloom", launcher_version=__version__,
-        classpath=os.pathsep.join(cp), classpath_separator=os.pathsep, library_directory=java_path(root / "libraries"))
+        classpath=os.pathsep.join(cp), classpath_separator=os.pathsep,
+        library_directory=libraries_java, libraries_directory=libraries_java,
+        primary_jar=primary_java, primary_jar_name=Path(primary_java).name, file_separator=os.sep)
     def expand(s):
         def replacement(x):
             if x[1] not in variables:
