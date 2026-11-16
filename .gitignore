@@ -4,6 +4,7 @@ __pycache__/
 .local/
 build/
 dist/
+release/
 *.db
 *.db-wal
 *.db-shm

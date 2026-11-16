@@ -111,5 +111,9 @@ with tempfile.TemporaryDirectory() as d:
                 window.download_java();window.download_java();wait(window,lambda:window.pending==0)
                 assert not window.java_busy and window.values['java'].get()==installed.path
         for page in ('home','instance','cloud','network','logs'):window.show(page);window.update()
+        before=set(window.winfo_children());window.show_licenses();window.update()
+        dialog=next(widget for widget in window.winfo_children() if widget not in before and isinstance(widget,ctk.CTkToplevel))
+        text=next(widget for widget in dialog.winfo_children() if isinstance(widget,ctk.CTkTextbox))
+        assert 'GPLv3' in text.get('1.0','end');dialog.destroy()
         print('Desktop smoke passed: navigation, installed versions, UI-thread dispatch, launch/exit, login, private settings.')
     finally:window.destroy()

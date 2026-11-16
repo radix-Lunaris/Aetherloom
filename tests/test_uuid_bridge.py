@@ -1,10 +1,17 @@
 import tempfile
 import unittest
+import sys
+from unittest.mock import patch
 from pathlib import Path
 from aetherloom.bridge_control import BridgeControl
 from aetherloom.launcher import offline_uuid
+from aetherloom.shared_session import assets
 
 class BridgeIdentityTests(unittest.TestCase):
+    def test_single_file_build_uses_extracted_assets(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(sys,'frozen',True,create=True),patch.object(sys,'_MEIPASS',d,create=True):
+            self.assertEqual(assets(),Path(d)/'assets')
+
     def test_registered_identity_cannot_alias_host_or_change_member(self):
         with tempfile.TemporaryDirectory() as d:
             control=BridgeControl(Path(d)/'world',offline_uuid('Host'),game_name='Host')

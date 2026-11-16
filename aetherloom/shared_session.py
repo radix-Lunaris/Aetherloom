@@ -17,7 +17,7 @@ from .environment import describe,validate
 
 
 def assets():
-    base=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parent.parent
+    base=Path(getattr(sys,'_MEIPASS',Path(sys.executable).parent)) if getattr(sys,'frozen',False) else Path(__file__).resolve().parent.parent
     return base/'assets'
 
 

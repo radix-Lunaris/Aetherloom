@@ -291,6 +291,19 @@ class Window(ctk.CTk):
             corner_radius=12,text_color="#C4C7D8",font=self.font(13))
         self.logbox.pack(fill="both",expand=True);self.logbox.configure(state="disabled")
         self.button(p,"清空记录",self.clear_logs,width=100).pack(anchor="e",pady=(12,0))
+        self.button(p,'许可与来源',self.show_licenses,width=110).pack(anchor='w',pady=(6,0))
+
+    def show_licenses(self):
+        base=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent.parent))
+        folder=base/'licenses' if getattr(sys,'frozen',False) else base
+        files=sorted(folder.iterdir()) if folder.is_dir() else []
+        if not getattr(sys,'frozen',False):files=[p for p in files if p.name in ('LICENSE','THIRD_PARTY.md')]
+        dialog=ctk.CTkToplevel(self);dialog.title('许可与来源');dialog.geometry('800x620');dialog.configure(fg_color=BG)
+        text=ctk.CTkTextbox(dialog,fg_color=CARD,text_color=TEXT,wrap='word');text.pack(fill='both',expand=True,padx=20,pady=20)
+        text.insert('end','Aetherloom · GPLv3\n源代码：https://github.com/radix-Lunaris/Aetherloom\n\n')
+        for path in files:
+            if path.is_file():text.insert('end','\n=== '+path.name+' ===\n'+path.read_text(encoding='utf-8',errors='replace')+'\n')
+        text.configure(state='disabled')
 
     def show(self,name):
         self.page=name;self.pages[name].tkraise()

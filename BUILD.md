@@ -1,23 +1,34 @@
-# 构建发行包
+# 构建与发行
 
 Windows Python3.11：
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-desktop.txt
-# 设置JAVA_HOME为JDK17，先构建两个Java模块。
-powershell -ExecutionPolicy Bypass -File scripts/build-playerdata.ps1
-powershell -ExecutionPolicy Bypass -File scripts/build-bridge.ps1
-powershell -ExecutionPolicy Bypass -File scripts/build-client.ps1
-powershell -ExecutionPolicy Bypass -File scripts/package-server.ps1
+# 设置 JAVA_HOME 为 JDK17；或使用项目 .local/jdk17 中的构建 JDK。
+powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
 ```
-客户端不再捆绑、下载或复制 Java。客户端会在已知 Java 安装位置、注册表、环境变量、用户 .jdks 和游戏／启动器的运行时专用目录有界发现，并实际探测版本与架构；也可手动指定。找不到时提供用户点击的一键官方运行时下载，默认安装到配置目录 java 下。下载目录不进入发行包，仍不要求构建机提供捆绑 JRE。
-构建两个 Java 辅助模块仍需要构建机 JDK17（JAVA_HOME）；这是构建依赖，不进入客户端包。
-CustomTkinter 来源：https://github.com/TomSchimansky/CustomTkinter （5.2.2，MIT）。
-客户端使用CustomTkinter 5.2.2，打包时收集其主题、字体和图片资源；发行包包含_internal目录，不要只复制EXE。
-源代码：https://github.com/radix-Lunaris/Aetherloom/tree/dev 。项目按GPLv3交付。
 
-Docker构建方式见DEPLOY.md；无需Windows构建依赖。
+最终产物只保留在项目根目录 `release/`：
 
-桌面流程检查：python scripts/smoke_desktop.py，使用临时实例和模拟进程，不启动真实游戏。软件配置写入本机LOCALAPPDATA/Aetherloom/settings.json，首次可读取旧Qt版本的注册表配置；不保存软件密码或登录令牌。
+- `Aetherloom.exe`：独立单文件客户端，直接运行，不需要旁边的 _internal、assets 或 runtime 目录，也不另生成客户端ZIP。
+- `Aetherloom-Server.tar.gz`：Docker服务端上传包，包含独立MySQL容器配置、源码和部署说明。
+- `SHA256SUMS.txt`：上述两个文件的校验和。
 
-Bridge使用Forge官方MDK的Gradle8.8包装器（Apache-2.0），ForgeGradle和官方1.20.1映射。玩家数据辅助模块仅引入shared-playerdata的MIT NBT核心，不引入全目录扫描器或轮询。assets下构建产物会随完整客户端复制；源码构建需先完成两个Java模块。
+构建后清理本项目的旧dist和编译中间目录，不另外复制到版本子目录。用户世界、配置、依赖缓存和已安装Java不清理。构建两个Java辅助模块仍需构建机JDK17；辅助JAR嵌入单文件EXE，运行时从PyInstaller临时资源目录加载，构建结束不在源码目录留下JAR副本。
+
+客户端不捆绑Java。自动发现已知系统／用户／游戏运行时并选择匹配版本；缺失时用户可点击官方校验下载。下载的Java在客户端配置目录 `java` 下，保持与发行产物分开。
+
+PyInstaller收集CustomTkinter的主题／字体／图片以及项目和第三方许可证。EXE内的许可证在“运行记录→许可与来源”查看。源码与许可见 https://github.com/radix-Lunaris/Aetherloom 。
+
+## 每轮发布
+
+1. 更新项目版本、`aetherloom.__version__`、面板版本和 RELEASE_NOTES.md；完成相应验证后提交并推送dev。
+2. 从该提交执行完整构建，检查来源提交、SHA-256和单文件EXE启动。
+3. 建立不覆盖旧历史的对应版本标签（例如v0.2.0），推送标签。
+4. `.\.venv\Scripts\python.exe scripts/publish_release.py verify` 校验唯一一份本地产物；`stage` 创建草稿并直接上传release目录中的文件。
+5. 同一来源提交的Core checks通过后执行 `publish` 公开发行版，不覆盖已发布附件。
+
+发布工具使用现有Git凭据，仅在内存中处理，不写令牌。开发阶段Release可来自dev；main仍在用户验收／要求后合入。服务器部署需要用户明确要求，不随发布自动执行。
+
+桌面检查：`python scripts/smoke_desktop.py`；核心检查：`python -m unittest discover -s tests -v`。源码运行共享功能前需构建Java模块；完整发行构建会自动处理和清理这些中间文件。Docker构建与升级见DEPLOY.md。

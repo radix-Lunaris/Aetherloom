@@ -6,7 +6,7 @@ Aetherloom控制服务与MySQL各用一个Docker容器，数据库不发布主�
 
 ## 上传与首次构建
 
-上传 `dist/Aetherloom-Server.zip`，解压到 `/opt/aetherloom`。包里有aetherloom、server、Compose、环境示例和说明。不要上传EXE、游戏目录、.venv或本机配置。
+上传 `release/Aetherloom-Server.tar.gz`，执行 `tar -xzf Aetherloom-Server.tar.gz -C /opt/aetherloom` 解压（先建立目标目录）。包里有aetherloom、server、Compose、环境示例和说明。不要上传EXE、游戏目录、.venv或本机配置。
 
 Ubuntu24.04安装Docker Engine/Compose和Nginx、Certbot。然后以root执行：
 

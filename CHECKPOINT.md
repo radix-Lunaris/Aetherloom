@@ -1,5 +1,13 @@
 # 实施检查点
 
+## 唯一release目录与v0.2.0发行（用户追加）
+- 用户明确要求：不再另打ZIP，所有构建产物在release独一份，每轮版本迭代发布一次GitHub Release。已落入项目AGENTS.md，后续执行沿用。
+- 当前改为单文件Aetherloom.exe（内嵌JAR／许可）、单份Docker tar.gz和SHA256SUMS；辅助模块在_MEIPASS/assets访问。许可入口在“运行记录→许可与来源”。
+- 完整构建脚本先生成产物，再核验清理路径位于本项目且不经过链接，删除旧dist、编译中间目录和本项目测试Mod副本。保留用户世界、配置、Java和依赖缓存，不删除历史远端发行。
+- 发行脚本只读取release中的唯一文件，不复制版本目录；核对客户端／服务端来源、校验和、dev／标签和CI，再草稿上传、验证远端摘要并公开。沿用现有Git凭据且不落盘。
+- 本轮版本v0.2.0，从已验证dev发布；不擅自合main，不自动再部署服务端。当前正在验证单文件构建与发布流程。
+- 45项回归与扩展桌面smoke通过，含单文件_MEIPASS资源路径和许可查看入口；后续将验证真实单文件EXE、唯一产物清理、远端CI和Release附件摘要。
+
 ## Java 自动发现与一键下载（2026-11-16）
 - 用户要求参考 HMCL，扩大 Java 搜索、自动选择合适版本，缺失时一键下载；本轮仅客户端开发与 dev 推送，不自动部署服务器或发行 Release。
 - 已只读审阅 HMCL JavaManager、JavaRuntime、GameJavaVersion、JavaVersionConstraint；自行实现，不复制其源码。范围为已知 Java 安装位置／注册表／环境变量／用户 .jdks／官方 Minecraft 与 HMCL 运行时目录／所选游戏附近已知运行时子目录，不递归全盘、不访问启动器账号缓存。
