@@ -9,6 +9,23 @@ from .vendor.craftlink.auto_stream import AutoManager, AutoStream, Config, TcpPa
 
 
 class PolicyStream(AutoStream):
+    async def run(self):
+        # Keep outer shutdown cancellation from interrupting the upstream
+        # finally block while it joins readers and releases memory reservations.
+        worker=asyncio.create_task(super().run())
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            self.reason='stopped';self.done.set()
+            try:
+                await asyncio.wait_for(asyncio.shield(worker),5)
+            except asyncio.TimeoutError:
+                worker.cancel()
+                await asyncio.gather(worker,return_exceptions=True)
+            except Exception:
+                pass
+            raise
+
     async def send_on(self,name,frame):
         if self.metadata.get('mode')=='DIRECT' and name=='relay' and frame.kind==Kind.DATA:
             return False
@@ -57,6 +74,7 @@ class WebSocketPath(TcpPath):
 class Network:
     def __init__(self,url,token,request,on_status=None):
         self.url,self.token,self.request=url,token,request
+        self.on_status=on_status or (lambda state:None)
         self.peers={};self.peer_sockets={};self.groups=set();self.stopped=threading.Event()
         self.manager=AutoManager(candidate=lambda peer:self.peers.get(peer),on_status=on_status,config=Config(memory_limit=64*1024*1024))
         self.tasks=set();self.server=None
@@ -91,19 +109,26 @@ class Network:
         if info['sid'] in self.groups:return
         self.groups.add(info['sid'])
         self.spawn(self.run_stream(info,None,None))
-        if info.get('mode')=='RELAY':return
+        def progress(stage,attempt=0):
+            self.on_status(dict(session_id=info['sid'],channel='network',peer=info['player'] if info['side']=='host' else info['host'],mode=info.get('mode','AUTO'),stage=stage,attempt=attempt))
+        if info.get('mode')=='RELAY':
+            progress('仅中继，不尝试打洞');return
         from .p2p import connect_peer
         async def attempt():
             peer_id=info['player'] if info['side']=='host' else info['host']
-            for delay in (0,5,15,30,60):
+            for number,delay in enumerate((0,5,15,30,60),1):
                 if self.stopped.is_set():return
                 if delay:await asyncio.sleep(delay)
                 try:
+                    progress('认证端点发现与 UDP 打洞中',number)
                     peer,sock=await connect_peer(info,self.request,self.url,self.manager,self.stopped)
+                    progress('UDP 承载已建立，等待流验证后迁移',number)
                     self.peers[peer_id]=peer;self.peer_sockets[peer_id]=sock
                     await peer.closed_event().wait()
                     self.peers.pop(peer_id,None);self.peer_sockets.pop(peer_id,None);sock.close()
-                except (OSError,ValueError):continue
+                except (OSError,ValueError) as error:
+                    progress('打洞失败：'+type(error).__name__+('；保留中继' if info.get('mode')!='DIRECT' else '；仅直连禁止中继游戏数据'),number)
+            progress('本轮打洞重试结束；'+('继续使用中继' if info.get('mode')!='DIRECT' else '直连不可用，请修改房间策略后重试'),5)
         self.spawn(attempt())
 
     def spawn(self,coro):

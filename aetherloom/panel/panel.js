@@ -1,5 +1,6 @@
 "use strict";
-let token="", role="", messageTimer;
+let token="", role="", messageTimer, refreshing=false, refreshFailures=0;
+const rowCache=new Map();
 const el=id=>document.getElementById(id);
 function message(text,error=false){
  const node=el("message");node.textContent=text;node.classList.toggle("error",error);node.hidden=false;
@@ -11,11 +12,18 @@ async function api(path,body,method){
  const data=await response.json();if(!response.ok)throw new Error(typeof data.detail==="string"?data.detail:"请求失败，请稍后重试");return data;
 }
 function rows(id,data,keys){
- const target=el(id);target.replaceChildren();
+ const target=el(id);
+ const cache=rowCache.get(id)||new Map();rowCache.set(id,cache);
+ const ids=new Set(data.map(item=>item.id||item.name));
+ for(const [key,entry] of cache)if(!ids.has(key)){entry.node.remove();cache.delete(key);}
+ target.querySelectorAll('.empty-cell').forEach(cell=>cell.parentElement.remove());
  if(!data.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=keys.length;td.className="empty-cell";
  const title=document.createElement("strong"),hint=document.createElement("span");title.textContent=id==="rooms"?"还没有实例记录":"暂无账号";
  hint.textContent=id==="rooms"?"从客户端创建实例后，可以在这里查看。":"创建第一个软件账号后，它会出现在这里。";td.append(title,hint);tr.append(td);target.append(tr);return;}
- for(const item of data){const tr=document.createElement("tr");for(const key of keys){const td=document.createElement("td");let value=item[key];
+ for(const item of data){
+ const identity=item.id||item.name, signature=JSON.stringify(item),old=cache.get(identity);
+ if(old&&old.signature===signature)continue;
+ const tr=document.createElement("tr");for(const key of keys){const td=document.createElement("td");let value=item[key];
  if(key==="role"){const badge=document.createElement("span");badge.className="role-badge"+(value==="player"?" player":"");badge.textContent=value;td.append(badge);}
  else{if(key==="disabled")value=value?"已停用":"正常";if(key==="state")value=({idle:"空闲",preparing:"准备中",ready:"已就绪",uploading:"同步中"})[value]||value;if(key==="host"&&!value)value="暂无 Host";td.textContent=String(value??"—");if(key==="id")td.className="cell-id";}
  tr.append(td);}
@@ -28,10 +36,12 @@ function rows(id,data,keys){
  }else if(id==='users'){actions.textContent='受保护';}
  if(id==='rooms'&&item.can_manage){
  button('管理',()=>roomDialog(item));button('成员',()=>membersDialog(item));
- button('恢复',()=>recoveryDialog(item));
+ button('恢复',()=>recoveryDialog(item));button('连接状态',()=>connectionsDialog(item));
  button('删除',()=>confirmAction('删除共享房间 '+item.name+'？客户端将无法再使用该房间。存档历史保留在服务端用于恢复。',()=>api('rooms/'+encodeURIComponent(item.id),undefined,'DELETE')));
  }
- tr.append(actions);target.append(tr);}
+ tr.append(actions);
+ if(old)old.node.replaceWith(tr);else target.append(tr);
+ cache.set(identity,{signature,node:tr});}
 }
 
 function dialog(title,fields,submit){
@@ -53,16 +63,21 @@ function accountDialog(item){
  if(role==='root')fields.push({key:'role',label:'权限等级组',value:item.role,options:['player','admin']});
  dialog('管理账号 · '+item.name,fields,body=>{if(!body.password)delete body.password;return api('users/'+encodeURIComponent(item.name),body,'PATCH');});
 }
-function roomDialog(item){dialog('管理共享房间',[
+async function roomDialog(item){try{
+ const canTransfer=role==='root'||item.owner===el('actor').textContent;
+ const options=canTransfer?await api('rooms/'+item.id+'/account-options'):[];
+ const fields=[
  {key:'name',label:'房间名称',value:item.name,required:true},
  {key:'environment',label:'游戏环境（版本和加载器）',value:item.environment||'',required:true},
- {key:'mode',label:'连接策略',value:item.mode||'AUTO',options:['AUTO','RELAY','DIRECT']},
- {key:'owner',label:'所有者账号',value:item.owner,required:true}
- ],body=>api('rooms/'+item.id,body,'PATCH'));}
+ {key:'mode',label:'连接策略',value:item.mode||'AUTO',options:['AUTO','RELAY','DIRECT']}];
+ if(canTransfer)fields.push({key:'owner',label:'所有者账号',value:item.owner,options:options.map(account=>account.name),required:true});
+ dialog('管理共享房间',fields,body=>api('rooms/'+item.id,body,'PATCH'));}catch(e){message(e.message,true);}}
 async function membersDialog(item){
- try{const members=await api('rooms/'+item.id+'/members');dialog('成员 · '+members.map(m=>m.actor+' ('+m.role+')').join('、'),[
- {key:'username',label:'成员账号',required:true},{key:'role',label:'实例权限 / 移除',options:['member','admin','remove']}
- ],body=>api('rooms/'+item.id+'/members',body));}catch(e){message(e.message,true);}
+ try{const canEdit=role==='root'||item.owner===el('actor').textContent;
+ const [members,options]=await Promise.all([api('rooms/'+item.id+'/members'),canEdit?api('rooms/'+item.id+'/account-options'):Promise.resolve([])]);
+ dialog('成员 · '+members.map(m=>m.actor+' ('+m.role+')').join('、'),canEdit?[
+ {key:'username',label:'成员账号',options:options.map(account=>account.name),required:true},{key:'role',label:'实例权限 / 移除',options:['member','admin','remove']}
+ ]:[],body=>canEdit?api('rooms/'+item.id+'/members',body):Promise.resolve());}catch(e){message(e.message,true);}
 }
 async function recoveryDialog(item){
  try{const [candidates,head]=await Promise.all([api('rooms/'+item.id+'/recoveries'),api('rooms/'+item.id+'/head')]);
@@ -82,10 +97,18 @@ function metric(label,value,unit,note,icon){
  const foot=document.createElement("small");foot.textContent=note;card.append(caption,number,foot);return card;
 }
 async function refresh(){
+ if(refreshing)return;
+ refreshing=true;
+ try{
  const [status,rooms,users]=await Promise.all([api("status"),api("rooms"),api("users")]);
- el("metrics").replaceChildren(metric("可用磁盘",gib(status.disk_free),"GiB","容量 "+gib(status.disk_total)+" GiB","▱"),
+ const metricCards=[metric("可用磁盘",gib(status.disk_free),"GiB","容量 "+gib(status.disk_total)+" GiB","▱"),
  metric("可用内存",gib(status.memory_available),"GiB","物理内存 "+gib(status.memory_total)+" GiB","▤"),
- metric("共享房间",status.rooms,"个","持久世界与当前 Host","▦"),metric("软件账号",status.accounts,"个","独立的软件登录身份","◎"));
+ metric("共享房间",status.rooms,"个","持久世界与当前 Host","▦"),metric("软件账号",status.accounts,"个","独立的软件登录身份","◎")];
+ const metrics=el('metrics');
+ metricCards.forEach((card,index)=>{const old=metrics.children[index];
+ if(!old)metrics.append(card);else for(let i=0;i<card.children.length;i++){
+ if(old.children[i].innerHTML!==card.children[i].innerHTML)old.children[i].replaceChildren(...card.children[i].childNodes);
+ }});
  const diskUsed=status.disk_total?100*(1-status.disk_free/status.disk_total):0;
  el("disk-progress").value=diskUsed;el("disk-label").textContent=diskUsed.toFixed(1)+"% · "+gib(status.disk_total-status.disk_free)+" / "+gib(status.disk_total)+" GiB";
  const memUsed=status.memory_total?100*(1-status.memory_available/status.memory_total):0;el("memory-progress").value=memUsed;
@@ -94,6 +117,8 @@ async function refresh(){
  el("service-version").textContent=status.version||"—";el("updated").textContent=new Date().toLocaleTimeString();
  el("room-count").textContent=rooms.length+" 个实例";el("account-count").textContent=users.length+" 个账号";
  rows("rooms",rooms,["name","environment","owner","host","state","epoch"]);rows("users",users,["name","role","disabled"]);
+ refreshFailures=0;
+ }finally{refreshing=false;}
 }
 function showView(name){
  document.querySelectorAll(".view").forEach(v=>{v.hidden=v.id!=="view-"+name;});
@@ -111,10 +136,28 @@ el("login").addEventListener("submit",async e=>{
  catch(error){if(token){try{await api("logout",{});}catch{}token="";}message(error.message,true);}
  finally{button.disabled=false;button.textContent="登录控制中心 →";}
 });
-el("refresh").addEventListener("click",async()=>{const b=el("refresh");b.disabled=true;try{await refresh();message("数据已更新");}catch(e){message(e.message,true);}finally{b.disabled=false;}});
+
 el("logout").addEventListener("click",async()=>{try{await api("logout",{});}catch{}finally{token="";location.reload();}});
 el("create-user").addEventListener("submit",async e=>{
  e.preventDefault();const button=e.target.querySelector("button");button.disabled=true;
  try{await api("users",{username:el("new-name").value,password:el("new-password").value,role:el("new-role").value});el("new-password").value="";el("new-name").value="";await refresh();message("账号已创建，请通过安全渠道告知使用者。");}
  catch(error){message(error.message,true);}finally{button.disabled=false;}
 });
+
+async function connectionsDialog(item){
+ const d=document.createElement('dialog'),title=document.createElement('h2'),body=document.createElement('pre'),close=document.createElement('button');
+ title.textContent='连接状态 · '+item.name;close.textContent='关闭';close.onclick=()=>d.close();
+ body.style.whiteSpace='pre-wrap';d.append(title,body,close);document.body.append(d);d.showModal();
+ let busy=false;
+ async function update(){if(busy||!d.open)return;busy=true;
+ try{const state=await api('rooms/'+item.id+'/diagnostics');
+ body.textContent='状态 '+state.state+' · Host '+(state.host||'无')+' · 代次 '+state.epoch+'\n'+
+ (state.streams.length?state.streams.map(stream=>stream.player+' · '+stream.channel+' · '+stream.mode+'\nHost 中继接入 '+stream.host_attached+' · Player 中继接入 '+stream.player_attached+'\n'+stream.path).join('\n\n'):'当前没有连接流');
+ }catch(e){body.textContent=e.message;}finally{busy=false;}}
+ const timer=setInterval(update,5000);d.addEventListener('close',()=>{clearInterval(timer);d.remove();});await update();
+}
+async function autoRefresh(){
+ if(token&&!document.hidden){try{await refresh();}catch(e){refreshFailures=Math.min(refreshFailures+1,4);el('updated').textContent='连接中断，自动重试';}}
+ setTimeout(autoRefresh,(document.hidden?30000:5000)*2**refreshFailures);
+}
+setTimeout(autoRefresh,5000);

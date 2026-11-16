@@ -12,6 +12,8 @@ from .cloud import API,CloudWorld,LeaseGuard
 from .launcher import launch,offline_uuid
 from .network import Network
 from .world_lock import closed_world
+from .runtime import hidden_process
+from .environment import describe,validate
 
 
 def assets():
@@ -24,17 +26,18 @@ def repair(world,java,identity,saved=False):
     if not helper.is_file():raise ValueError('交付包缺少玩家数据辅助模块，禁止共享开服')
     with closed_world(world):
         result=subprocess.run([java,'-Xmx128M','-jar',str(helper),'saved' if saved else 'prepare',str(world),str(uuid.UUID(identity))],
-            capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=90)
+            capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=90,**hidden_process())
         if result.returncode:raise ValueError('玩家数据检查失败：'+(result.stderr or result.stdout).strip())
 
 
 class SharedSession:
     def __init__(self,url,token,cache,room,binding,notify,confirm_recovery=False):
-        self.api=API(url,token);self.cloud=CloudWorld(self.api,cache)
+        self.api=API(url,token);self.cloud=CloudWorld(self.api,cache,progress=lambda text:notify('status',text))
         self.room,self.binding,self.notify=room,binding,notify
         self.confirm_recovery=confirm_recovery;self.process=None;self.stop=False
         self.path_states={}
         def status(state):
+            self.notify('network',state)
             if state.get('channel')!='data':return
             path=state.get('active_path')
             if self.path_states.get(state['session_id'])!=path:
@@ -52,12 +55,17 @@ class SharedSession:
     async def run(self):
         base='/api/rooms/'+self.room
         try:
+            self.notify('status','正在核验房间权限和权威版本信息')
             items=await asyncio.to_thread(self.api,'/api/rooms')
             room=next((r for r in items if r['id']==self.room),None)
             if not room:raise ValueError('共享房间不存在')
+            validate(describe(self.binding['root'],self.binding['version']),room.get('environment'))
+            await asyncio.to_thread(self.api,base+'/join',{})
+            head_info=await asyncio.to_thread(self.api,base+'/head')
+            if not head_info.get('version'):raise ValueError('此房间尚未发布权威存档')
+            self.notify('status','权威版本已确认 '+head_info['version'][:10]+'，正在确认 Host 身份')
             if room['host'] and room['expires']>time.time():
-                if room['state']!='ready':raise ValueError('Host正在准备或上传，请稍后刷新')
-                await asyncio.to_thread(self.api,base+'/join',{})
+                if room['state']!='ready':raise ValueError('Host正在准备或上传，列表会自动更新，请稍后再在线启动')
                 port=await self.network.listen(self.room)
                 self.notify('status','已建立本地联机代理，正在启动加入游戏')
                 b=self.binding
@@ -91,13 +99,7 @@ class SharedSession:
             if not bridge_jar.is_file():raise ValueError('交付包缺少Forge游戏Bridge，禁止把空房间标记为就绪')
             if world.parent!=(Path(b['run']).resolve()/'saves'):
                 raise ValueError('共享世界必须位于所选运行目录的saves下，请重新绑定')
-            from .launcher import manifest
-            descriptor=manifest(Path(b['root']),b['version'])
-            libraries=[item['name'] for item in descriptor.get('libraries',[])]
-            if not any(name.startswith('net.minecraftforge:forge:1.20.1-47.4.22') for name in libraries):
-                args=descriptor.get('arguments',{}).get('game',[])
-                if not ('1.20.1' in args and '47.4.22' in args):
-                    raise ValueError('共享Host首版需要Minecraft 1.20.1 / Forge 47.4.22；普通启动不受此限制')
+            self.notify('status','正在申请唯一 Host 租约')
             lease=await asyncio.to_thread(self.api,base+'/claim',{'confirm_recovery':self.confirm_recovery})
             self.guard=LeaseGuard(self.api,self.room,lease)
             credentials=self.guard.lease
@@ -107,6 +109,7 @@ class SharedSession:
                 head=await asyncio.to_thread(self.cloud.download,self.room,world)
                 if head!=lease['head']:raise ValueError('云端版本与租约基准不一致')
                 identity=offline_uuid(b['name'])
+                self.notify('status','权威存档同步完成，正在校验玩家数据并启动世界')
                 await asyncio.to_thread(repair,world,b['java'],identity)
                 mods=Path(b['run'])/'mods';mods.mkdir(exist_ok=True)
                 shutil.copy2(bridge_jar,mods/bridge_jar.name)
@@ -159,6 +162,14 @@ class SharedSession:
                     await asyncio.to_thread(self.api,base+'/cancel',credentials)
                 raise
         finally:
+            if self.bridge and self.process and self.process.poll() is None:
+                # Bridge performs normal disconnect/save, then exits Minecraft.
+                self.bridge.stop=True
+                deadline=time.monotonic()+15
+                while self.process.poll() is None and time.monotonic()<deadline:
+                    await asyncio.sleep(.25)
+                if self.process.poll() is None:
+                    self.notify('status','游戏仍在结束，请等待；不会强杀可能正在保存的进程')
             await self.network.close()
             if self.guard:self.guard.close()
             if self.bridge:await asyncio.to_thread(self.bridge.close)

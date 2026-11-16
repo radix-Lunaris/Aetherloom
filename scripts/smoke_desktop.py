@@ -52,6 +52,29 @@ with tempfile.TemporaryDirectory() as d:
         data=json.loads(window.settings.path.read_text(encoding='utf-8'))
         assert 'password' not in data and 'token' not in data
         assert 'never-save-this' not in window.settings.path.read_text(encoding='utf-8')
-        for page in ('home','instance','cloud','logs'):window.show(page);window.update()
+        assert window.start.cget('text').startswith('离线启动')
+        assert window.online.cget('text').startswith('在线启动')
+        assert launch.call_args.kwargs.get('bridge_file') is None
+        # Polling must retain existing room widgets and scroll position.
+        rooms=[dict(id=str(i),owner='test',name='room '+str(i),environment='1.20.1 Forge 47.4.22',host=None,state='idle',head='v1',expires=0,epoch=0) for i in range(15)]
+        with patch('aetherloom.cloud.API.__call__',return_value=rooms):
+            window.rooms();wait(window,lambda:window.pending==0)
+            window.show('cloud');window.update()
+            row=window.room_rows['0'][0]
+            window.room_list._parent_canvas.yview_moveto(.5);window.update()
+            position=window.room_list._parent_canvas.yview()[0]
+            window.rooms();wait(window,lambda:window.pending==0)
+            assert window.room_rows['0'][0] is row
+            assert abs(window.room_list._parent_canvas.yview()[0]-position)<.01
+            window.select_room(rooms[0]);assert 'room 0' in window.selected_hint.cget('text')
+        window.values['run'].set(str(root/'custom-run'));window.save()
+        alternate=root/'game/versions/test-two';(alternate/'mods').mkdir(parents=True)
+        (alternate/'test-two.json').write_text('{}')
+        window.values['version'].set('test-two');window.select_version(save=False)
+        assert window.values['run'].get()==str(alternate)
+        window.values['version'].set('test-forge');window.select_version(save=False)
+        assert window.values['run'].get()==str(root/'custom-run')
+        wait(window,lambda:window.pending==0)
+        for page in ('home','instance','cloud','network','logs'):window.show(page);window.update()
         print('Desktop smoke passed: navigation, installed versions, UI-thread dispatch, launch/exit, login, private settings.')
     finally:window.destroy()

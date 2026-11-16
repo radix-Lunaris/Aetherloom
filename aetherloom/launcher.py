@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import subprocess
+from . import __version__
 import uuid
 import zipfile
 from pathlib import Path
@@ -129,7 +130,8 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
             require(root / "assets" / "objects" / h[:2] / h)
     if missing:
         raise LaunchError("Missing files:\n" + "\n".join(missing))
-    probe = subprocess.run([str(java), "-version"], capture_output=True, text=True, timeout=15)
+    from .runtime import hidden_process
+    probe = subprocess.run([str(java), "-version"], capture_output=True, text=True, timeout=15, **hidden_process())
     match = re.search(r'version "(\d+)(?:\.(\d+))?', probe.stderr + probe.stdout)
     major = int(match[2]) if match and match[1] == "1" else int(match[1]) if match else 0
     required = m.get("javaVersion", {}).get("majorVersion", 17)
@@ -143,7 +145,7 @@ def prepare(root, version, java, name, run_dir=None, memory=2048):
         resolution_width="1280", resolution_height="720",
         user_type="legacy", user_properties="{}", version_name=version, version_type=m.get("type", "release"),
         game_directory=java_path(run), assets_root=java_path(root / "assets"), assets_index_name=asset_id,
-        natives_directory=java_path(native_dir), launcher_name="Aetherloom", launcher_version="0.1.0",
+        natives_directory=java_path(native_dir), launcher_name="Aetherloom", launcher_version=__version__,
         classpath=os.pathsep.join(cp), classpath_separator=os.pathsep, library_directory=java_path(root / "libraries"))
     def expand(s):
         def replacement(x):
@@ -194,5 +196,8 @@ def launch(*args, quick_play=None, bridge_file=None, before_start=None, managed=
     logs.mkdir(parents=True, exist_ok=True)
     if before_start:before_start()
     with (logs / ('game-' + uuid.uuid4().hex + '.log')).open('wb') as output:
-        return subprocess.Popen(command, cwd=run, stdout=output, stderr=subprocess.STDOUT,env=environment)
+        from .runtime import hidden_process
+        from .diagnostics import event
+        event('game.spawn', mode='online' if managed else 'offline', run=run, argc=len(command))
+        return subprocess.Popen(command, cwd=run, stdout=output, stderr=subprocess.STDOUT,env=environment,**hidden_process())
 

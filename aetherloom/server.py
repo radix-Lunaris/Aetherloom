@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from .store import Authority, Conflict
 from .management import install, edit_account, valid_name, password_hash, audit
+from . import __version__
 
 class Login(BaseModel):
     username: str
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         try:yield
         finally:
             if relay.rendezvous:relay.rendezvous.close()
-    app = FastAPI(title="Aetherloom", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None,lifespan=lifespan)
+    app = FastAPI(title="Aetherloom", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,lifespan=lifespan)
     app.state.store = store
     upload_slots=asyncio.Semaphore(max(1,min(16,int(os.environ.get("AETHERLOOM_TRANSFER_CONCURRENCY","4")))))
     attempts = {}
@@ -172,7 +173,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
 
     @app.get("/health")
     def health():
-        return {"status":"ok","version":"0.1.0"}
+        return {"status":"ok","version":__version__}
 
     @app.post("/api/login")
     def login(body:Login, request:Request):
@@ -219,7 +220,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
             rooms=c.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
             accounts=c.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
         result={"disk_total":disk.total,"disk_free":disk.free,"rooms":rooms,"accounts":accounts,
-                "cpu_count":os.cpu_count(),"server_time":time.time(),"version":"0.1.0"}
+                "cpu_count":os.cpu_count(),"server_time":time.time(),"version":__version__}
         if hasattr(os,'getloadavg'):result['load_average']=os.getloadavg()
         meminfo=Path('/proc/meminfo')
         if meminfo.exists():
@@ -281,6 +282,28 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
     @app.get('/api/rooms/{room}/membership')
     def membership(room:str,user=Depends(participant)):
         return {'ok':True,'username':user['name']}
+
+    @app.get('/api/rooms/{room}/account-options')
+    def account_options(room:str,user=Depends(authenticate)):
+        # Only ownership/member managers may enumerate eligible target names.
+        with store.connect() as c:
+            r=c.execute('SELECT owner FROM rooms WHERE id=?',(room,)).fetchone()
+            if not r:raise HTTPException(404,'房间不存在')
+            if user['role']!='root' and user['name']!=r['owner']:
+                raise HTTPException(403,'仅Owner或root可选择账号管理成员与所有权')
+            return [dict(row) for row in c.execute('SELECT a.name FROM accounts a LEFT JOIN account_settings s ON s.name=a.name WHERE COALESCE(s.disabled,0)=0 ORDER BY a.name').fetchall()]
+
+    @app.get('/api/rooms/{room}/diagnostics')
+    async def connection_diagnostics(room:str,user=Depends(authenticate)):
+        manager(room,user)
+        with store.connect() as c:
+            r=c.execute('SELECT epoch,host,expires,state FROM rooms WHERE id=?',(room,)).fetchone()
+        # Server can observe relay attachments, not whether clients use P2P.
+        return {'room':room,'host':r['host'],'epoch':r['epoch'],'state':r['state'],
+                'streams':[{'id':p.sid,'player':p.player,'channel':p.channel,'mode':p.mode,
+                            'host_attached':'host' in p.ends,'player_attached':'player' in p.ends,
+                            'path':'服务器仅观测中继承载；P2P 状态见客户端'}
+                           for p in relay.pairs.values() if p.room==room and p.epoch==r['epoch']]}
 
     @app.post("/api/rooms")
     def create(body:RoomInput=RoomInput(),user=Depends(authenticate)):

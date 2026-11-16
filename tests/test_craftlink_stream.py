@@ -8,8 +8,9 @@ import uuid
 from pathlib import Path
 
 
-from aetherloom.vendor.craftlink.auto_stream import (AutoManager, AutoStream, Config, Decoder, DirectPath, MemoryBudget,
+from aetherloom.vendor.craftlink.auto_stream import (AutoManager, Config, Decoder, DirectPath, MemoryBudget,
     Frame, Kind, TcpPath, HEADER)
+from aetherloom.network import PolicyStream as AutoStream
 
 
 async def socket_pair():
@@ -229,6 +230,15 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.gather(blocked, return_exceptions=True)
         budget.release(128)
         self.assertEqual(budget.used, 0)
+
+    async def test_outer_cancel_during_timeout_cleanup_releases_budget(self):
+        app,backend,a,b,*_=await self.pair(Config(unavailable_timeout=.3))
+        await self.exchange(app,backend,b'cleanup-race')
+        a.path_failed('relay')
+        await asyncio.wait_for(a.done.wait(),2)
+        self.tasks[0].cancel()
+        await asyncio.gather(self.tasks[0],return_exceptions=True)
+        self.assertEqual(a.manager.budget.used,0)
 
     async def test_application_timeout_detaches_without_closing_shared_carrier(self):
         app, backend, a, b, pa, pb, ca, cb = await self.pair()

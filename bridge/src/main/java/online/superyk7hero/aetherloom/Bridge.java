@@ -39,6 +39,7 @@ public class Bridge {
     private long joinDeadline;
     private boolean connecting = false;
     private boolean joined = false;
+    private volatile boolean finished = false;
 
     public Bridge() {
         String file = System.getenv("AETHERLOOM_BRIDGE_FILE");
@@ -105,6 +106,7 @@ public class Bridge {
         loaded = false;
         try { event("saved", 0, server); }
         catch (Exception e) { System.err.println("Aetherloom: saved event was not acknowledged; retain local recovery data."); }
+        finished = true;
     }
 
     private void leave() {
@@ -116,7 +118,7 @@ public class Bridge {
 
     private void join(Minecraft mc) {
         if (joined) {
-            if (mc.player == null) loaded = false;
+            if (mc.player == null && mc.level == null) { loaded = false; finished = true; }
             return;
         }
         if (mc.player != null && mc.level != null && mc.getSingleplayerServer() == null) {
@@ -152,6 +154,11 @@ public class Bridge {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         if (config.has("join")) join(mc);
+        if (finished && mc.level == null && mc.getSingleplayerServer() == null) {
+            finished = false;
+            mc.stop();
+            return;
+        }
         IntegratedServer pending = pendingServer;
         // publishServer reads Minecraft.player, which is still null during
         // ServerStartedEvent. Wait for the local client to finish joining.
@@ -159,11 +166,11 @@ public class Bridge {
             pendingServer = null;
             open(pending);
         }
-        if (!loaded) return;
         if (stop) {
             stop = false;
             System.out.println("Aetherloom: stopping managed world");
-            leave();
+            if (mc.level != null || mc.getSingleplayerServer() != null) leave();
+            else mc.stop();
             return;
         }
         long now = System.currentTimeMillis();

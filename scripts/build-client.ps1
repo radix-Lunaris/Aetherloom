@@ -3,8 +3,12 @@ Set-Location (Split-Path $PSScriptRoot -Parent)
 & .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --windowed --onedir --name Aetherloom --collect-all customtkinter --exclude-module PySide6 --exclude-module PyQt6 desktop.py
 if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
 Copy-Item LICENSE,THIRD_PARTY.md,DEPLOY.md,BUILD.md,PLAY.md dist\Aetherloom
-if (-not (Test-Path runtime\bin\java.exe)) { throw 'Place Temurin Java17 JRE in runtime first' }
-Copy-Item runtime dist\Aetherloom\runtime -Recurse -Force
+# Runtime is supplied by the player's game environment, never bundled.
+# Remove only this obsolete artifact if building over a previous distribution.
+$clientOutput = [IO.Path]::GetFullPath((Join-Path (Get-Location) 'dist/Aetherloom'))
+$obsoleteRuntime = [IO.Path]::GetFullPath((Join-Path $clientOutput 'runtime'))
+if ((Split-Path $obsoleteRuntime -Parent) -ne $clientOutput) { throw 'Invalid runtime artifact path' }
+if (Test-Path -LiteralPath $obsoleteRuntime) { Remove-Item -LiteralPath $obsoleteRuntime -Recurse -Force }
 Copy-Item assets dist\Aetherloom\assets -Recurse -Force
 Copy-Item playerdata\LICENSE.shared-playerdata dist\Aetherloom\LICENSE.shared-playerdata
 Copy-Item aetherloom\vendor\craftlink\SOURCE.json dist\Aetherloom\CraftLink-SOURCE.json

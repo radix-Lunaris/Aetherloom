@@ -9,6 +9,7 @@ import urllib.request
 from .store import Authority
 from .sync import snapshot, materialize
 from .world_lock import closed_world
+from .diagnostics import event
 
 
 class API:
@@ -20,10 +21,15 @@ class API:
         elif body is not None:data=json.dumps(body).encode();h['Content-Type']='application/json'
         else:data=None
         request=urllib.request.Request(self.url+path,data=data,headers=h,method=method)
+        started=time.monotonic()
+        event('api.request',method=request.get_method(),path=path,bytes=len(data or b''))
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
-                return response.read() if raw else json.load(response)
+                result=response.read() if raw else json.load(response)
+                event('api.response',method=request.get_method(),path=path,status=response.status,elapsed_ms=round((time.monotonic()-started)*1000))
+                return result
         except urllib.error.HTTPError as e:
+            event('api.error',method=request.get_method(),path=path,status=e.code)
             try:detail=json.load(e).get('detail',str(e))
             except Exception:detail=str(e)
             raise ValueError(str(detail)) from None
@@ -53,26 +59,33 @@ class LeaseGuard:
 
 
 class CloudWorld:
-    def __init__(self,api,cache):
-        self.api=api;self.cache=Authority(Path(cache))
+    def __init__(self,api,cache,progress=None):
+        self.api=api;self.cache=Authority(Path(cache));self.progress=progress or (lambda text:None)
 
     def upload(self,room,world,lease,parent):
         with closed_world(world):
+            self.progress('正在流式校验已关闭世界，计算 SHA-256 增量')
             manifest=snapshot(world,self.cache)
             hashes=sorted({p[2] for e in manifest.values() for p in e['pieces']})
             base='/api/rooms/'+room
+            sent=0
             for start in range(0,len(hashes),4096):
                 result=self.api(base+'/missing',{'lease':lease,'hashes':hashes[start:start+4096]})
                 for h in result['missing']:
                     data=(self.cache.root/'blobs'/h[:2]/h).read_bytes()
                     self.api(base+'/blobs/'+h,data,method='PUT',headers={'X-Lease':lease['token'],'X-Epoch':str(lease['epoch'])})
+                    sent+=1
+                    if sent==1 or sent%16==0 or h==result['missing'][-1]:
+                        self.progress(f'增量上传：已发送 {sent} 块，本批缺失 {len(result["missing"])} 块')
+            self.progress('增量上传完成，正在提交并确认权威版本')
             return self.api(base+'/commit',dict(lease,parent=parent,manifest=manifest))['version']
 
     def download(self,room,world):
         result=self.api('/api/rooms/'+room+'/head')
         if result['version'] is None:raise ValueError('此房间尚未发布共同存档，请由所有者先发布')
         hashes={p[2] for e in result['manifest'].values() for p in e['pieces']}
-        for h in hashes:
+        for index,h in enumerate(sorted(hashes),1):
+            if index==1 or index%16==0 or index==len(hashes):self.progress(f'权威存档校验／下载：{index} / {len(hashes)} 块')
             path=self.cache.root/'blobs'/h[:2]/h
             if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=h:
                 data=self.api('/api/rooms/'+room+'/blobs/'+h,raw=True)

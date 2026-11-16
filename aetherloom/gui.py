@@ -14,6 +14,10 @@ import urllib.request
 import customtkinter as ctk
 import asyncio
 from .launcher import launch, inside
+from . import __version__
+from .runtime import discover_java
+from .environment import describe, encode, validate
+from .diagnostics import setup, logger, safe, event
 
 BG="#101116"
 SIDE="#17181F"
@@ -57,7 +61,16 @@ class Window(ctk.CTk):
         self.minsize(1040,730)
         self.configure(fg_color=BG)
         self.settings=Settings(config_dir)
+        setup(self.settings.path.parent/"logs")
         self.events=queue.Queue()
+        self.room_rows={}
+        self.room_items={}
+        self.rooms_busy=False
+        self.refresh_failures=0
+        self.network_rows={}
+        self.selected_room=self.settings.data.get("selected_room", "")
+        self.profiles=self.settings.data.get("local_profiles", {})
+        self.profile_key=None
         self.pending=0
         self.process=None
         self.token=""
@@ -72,38 +85,36 @@ class Window(ctk.CTk):
         data=self.settings.data
         self.bindings=data.get('room_bindings',{})
         self.auto_run=data.get('auto_run_path','')
-        base=Path(sys.executable).parent if getattr(sys,"frozen",False) else Path(__file__).resolve().parent.parent
-        bundled=base/"runtime"/"bin"/("java.exe" if os.name=="nt" else "java")
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
              ("url","https://artherlink.superyk7hero.online:47192"),("username","")]}
         if self.values['url'].get().rstrip('/').lower() in ('https://artherlink.superyk7hero.online','https://artherlink.superyk7hero.online:443'):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
-        self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else str(bundled) if bundled.exists() else "")
+        self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else "")
         self.password=tk.StringVar()
         self.grid_rowconfigure(0,weight=1)
         self.grid_columnconfigure(1,weight=1)
         self.sidebar=ctk.CTkFrame(self,width=216,corner_radius=0,fg_color=SIDE)
         self.sidebar.grid(row=0,column=0,sticky="nsew")
         self.sidebar.grid_propagate(False)
-        self.sidebar.grid_rowconfigure(7,weight=1)
+        self.sidebar.grid_rowconfigure(8,weight=1)
         self.label(self.sidebar,"A",size=30,color=ACCENT,bold=True).grid(row=0,column=0,sticky="w",padx=28,pady=(30,4))
         self.label(self.sidebar,"Aetherloom",size=21,bold=True).grid(row=1,column=0,sticky="w",padx=28)
         self.label(self.sidebar,"让世界，继续。",size=12,color=MUTED).grid(row=2,column=0,sticky="w",padx=28,pady=(4,34))
         self.nav={}
-        for row,(key,title) in enumerate([("home","开始游戏"),("instance","本地游戏"),("cloud","共享世界"),("logs","运行记录")],3):
+        for row,(key,title) in enumerate([("home","开始游戏"),("instance","本地游戏"),("cloud","共享世界"),("network","联机状态"),("logs","运行记录")],3):
             b=ctk.CTkButton(self.sidebar,text=title,anchor="w",width=176,height=44,
                 corner_radius=8,fg_color="transparent",hover_color="#252633",
                 text_color=MUTED,font=self.font(14),command=lambda k=key:self.show(k))
             b.grid(row=row,column=0,padx=20,pady=4)
             self.nav[key]=b
         foot=ctk.CTkFrame(self.sidebar,fg_color="#20212D",corner_radius=10)
-        foot.grid(row=8,column=0,padx=20,pady=(20,14),sticky="ew")
+        foot.grid(row=9,column=0,padx=20,pady=(20,14),sticky="ew")
         self.label(foot,"离线游戏身份",size=12,color=ACCENT).pack(anchor="w",padx=14,pady=(12,2))
         self.identity=self.label(foot,self.values["name"].get(),size=14,bold=True)
         self.identity.pack(anchor="w",padx=14,pady=(0,12))
-        self.label(self.sidebar,"v0.1.0",size=11,color="#696C81").grid(row=9,column=0,sticky="w",padx=28,pady=(0,24))
+        self.label(self.sidebar,'v'+__version__,size=11,color="#696C81").grid(row=10,column=0,sticky="w",padx=28,pady=(0,24))
         self.body=ctk.CTkFrame(self,fg_color=BG,corner_radius=0)
         self.body.grid(row=0,column=1,sticky="nsew",padx=34,pady=28)
         self.body.grid_columnconfigure(0,weight=1)
@@ -124,9 +135,11 @@ class Window(ctk.CTk):
         self.build_home()
         self.build_instance()
         self.build_cloud()
+        self.build_network()
         self.build_logs()
         self.load_versions(silent=True)
         self.show("home")
+        self.after(5000,self.auto_refresh)
         self.protocol("WM_DELETE_WINDOW",self.close)
         self.after(100,self.drain)
         self.after(1000,self.poll_game)
@@ -156,7 +169,7 @@ class Window(ctk.CTk):
 
     def build_home(self):
         p=self.pages["home"]
-        self.heading(p,"开始你的下一段旅程","选择本地实例，准备好就出发。")
+        self.heading(p,"开始你的下一段旅程","离线进入游戏主菜单，在线接续选中的共享世界。")
         hero=self.card(p,height=206)
         hero.pack(fill="x",pady=(0,18))
         hero.pack_propagate(False)
@@ -181,8 +194,12 @@ class Window(ctk.CTk):
         info=ctk.CTkFrame(bottom,fg_color="transparent");info.pack(side="left",padx=22,pady=20)
         self.game_state=self.label(info,"准备就绪",17,bold=True);self.game_state.pack(anchor="w")
         self.game_detail=self.label(info,"先选择一个完整的本地游戏实例",12,MUTED);self.game_detail.pack(anchor="w",pady=(4,0))
-        self.start=self.button(bottom,"启动游戏   →",self.start_game,primary=True,width=190)
-        self.start.pack(side="right",padx=22,pady=20)
+        self.start=self.button(bottom,"离线启动   →",self.start_game,primary=True,width=130)
+        self.start.pack(side="right",padx=12,pady=20)
+        self.online=self.button(bottom,"在线启动   →",self.start_online,primary=True,width=130)
+        self.online.pack(side="right",padx=8,pady=20)
+        self.selected_hint=self.label(p,"在线实例：尚未选择，请到共享世界选择",12,MUTED)
+        self.selected_hint.pack(anchor="w",pady=(8,0))
 
     def build_instance(self):
         p=self.pages["instance"]
@@ -193,11 +210,11 @@ class Window(ctk.CTk):
         c=self.card(scroll);c.grid(row=0,column=0,sticky="ew",pady=(0,16));c.grid_columnconfigure(0,weight=1)
         self.label(c,"游戏实例",17,bold=True).grid(row=0,column=0,sticky="w",padx=22,pady=(18,10))
         self.path_row(c,1,"游戏根目录","root",False)
-        self.label(c,"游戏版本",12,MUTED).grid(row=3,column=0,sticky="w",padx=22,pady=(14,6))
+        self.label(c,"本地实例 / 版本管理 · Beta",12,MUTED).grid(row=3,column=0,sticky="w",padx=22,pady=(14,6))
         vr=ctk.CTkFrame(c,fg_color="transparent");vr.grid(row=4,column=0,sticky="ew",padx=22,pady=(0,22));vr.grid_columnconfigure(0,weight=1)
         self.version_menu=ctk.CTkOptionMenu(vr,variable=self.values["version"],values=["尚未选择"],height=40,
             fg_color="#282A3A",button_color="#373A50",button_hover_color="#474B66",font=self.font(13),
-            command=lambda _:(self.suggest_run(),self.save()))
+            command=lambda _:self.select_version())
         self.version_menu.grid(row=0,column=0,sticky="ew")
         self.button(vr,"刷新版本",self.load_versions,width=100).grid(row=0,column=1,padx=(12,0))
         c=self.card(scroll);c.grid(row=1,column=0,sticky="ew",pady=(0,16));c.grid_columnconfigure(0,weight=1)
@@ -206,9 +223,11 @@ class Window(ctk.CTk):
         for col,key,title in [(0,"name","离线玩家名称"),(1,"memory","最大内存 / MiB")]:
             f=ctk.CTkFrame(row,fg_color="transparent");f.grid(row=0,column=col,sticky="ew",padx=(0,10) if col==0 else (10,0))
             self.label(f,title,12,MUTED).pack(anchor="w",pady=(0,6));self.entry(f,key).pack(fill="x")
-        self.path_row(c,2,"Java 可执行文件","java",True)
-        self.path_row(c,4,"运行目录 · 自动识别版本隔离，可手动修改","run",False)
-        self.button(c,"保存配置",self.save,primary=True,width=120).grid(row=6,column=0,sticky="e",padx=22,pady=20)
+        self.path_row(c,2,"Java · 从所选游戏目录自动查找，也可手动指定","java",True)
+        self.java_menu=ctk.CTkOptionMenu(c,values=['尚未发现 Java'],variable=self.values['java'],fg_color=CARD,button_color=PRIMARY,command=lambda _:self.save())
+        self.java_menu.grid(row=4,column=0,sticky='ew',padx=22,pady=8)
+        self.path_row(c,6,"运行目录 · 自动识别版本隔离，可手动修改","run",False)
+        self.button(c,"保存配置",self.save,primary=True,width=120).grid(row=8,column=0,sticky="e",padx=22,pady=20)
 
     def path_row(self,parent,row,title,key,file):
         self.label(parent,title,12,MUTED).grid(row=row,column=0,sticky="w",padx=22,pady=(10,6))
@@ -239,7 +258,7 @@ class Window(ctk.CTk):
         toolbar=ctk.CTkFrame(p,fg_color="transparent");toolbar.pack(fill="x",pady=(0,10))
         self.label(toolbar,"共享房间",17,bold=True).pack(side="left")
         self.cloud_buttons=[]
-        for title,callback in [("刷新",self.rooms),("发布世界",self.create_room),("账号",self.account_settings)]:
+        for title,callback in [("发布世界",self.create_room),("账号",self.account_settings)]:
             b=self.button(toolbar,title,callback,width=95);b.pack(side="right",padx=(8,0));b.configure(state="disabled");self.cloud_buttons.append(b)
         self.room_list=ctk.CTkScrollableFrame(p,fg_color=CARD,corner_radius=12,border_width=1,border_color=BORDER)
         self.room_list.pack(fill="both",expand=True)
@@ -256,7 +275,7 @@ class Window(ctk.CTk):
     def show(self,name):
         self.page=name;self.pages[name].tkraise()
         for key,b in self.nav.items():b.configure(fg_color="#302B49" if key==name else "transparent",text_color=ACCENT if key==name else MUTED)
-        self.breadcrumb.configure(text="工作台  /  "+{"home":"开始游戏","instance":"本地游戏","cloud":"共享世界","logs":"运行记录"}[name])
+        self.breadcrumb.configure(text="工作台  /  "+{"home":"开始游戏","instance":"本地游戏","cloud":"共享世界","network":"联机状态","logs":"运行记录"}[name])
         self.refresh_summary()
 
     def refresh_summary(self):
@@ -264,19 +283,28 @@ class Window(ctk.CTk):
         self.instance_title.configure(text=(version[:32] if version!="尚未选择" else "尚未绑定"))
         self.instance_hint.configure(text="已选择本地游戏目录" if self.values["root"].get() else "到本地游戏中选择 .minecraft 目录")
         self.identity.configure(text=self.values["name"].get() or "Player")
+        if hasattr(self,"selected_hint"):
+            selected=self.room_items.get(self.selected_room)
+            self.selected_hint.configure(text="在线实例："+(selected.get("name",self.selected_room) if selected else "尚未选择，请到共享世界选择"))
         self.game_detail.configure(text=f"{self.values['name'].get()}  ·  {self.values['memory'].get()} MiB" if version!="尚未选择" else "先选择一个完整的本地游戏实例")
 
     def note(self,message,error=False):
+        message=safe(message)
         self.notice.configure(text=message[:115],text_color="#F0AF9C" if error else MUTED)
-        line=time.strftime("%H:%M:%S")+"  "+message
+        logger.log(40 if error else 20,message)
+        line=time.strftime("%H:%M:%S")+("  ERROR  " if error else "  INFO  ")+message
         self.logs.append(line)
+        if len(self.logs)>3000:
+            del self.logs[:1000]
+            self.logbox.configure(state="normal");self.logbox.delete("1.0","1001.0")
         self.logbox.configure(state="normal");self.logbox.insert("end",line+"\n");self.logbox.see("end");self.logbox.configure(state="disabled")
 
     def clear_logs(self):
         self.logs.clear();self.logbox.configure(state="normal");self.logbox.delete("1.0","end");self.logbox.configure(state="disabled")
 
     def save(self):
-        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},room_bindings=self.bindings,auto_run_path=self.auto_run))
+        self.remember_profile()
+        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},room_bindings=self.bindings,auto_run_path=self.auto_run,selected_room=self.selected_room,local_profiles=self.profiles))
         except OSError as e:self.note("配置保存失败："+str(e),True);return False
         self.refresh_summary();self.note("配置已保存");return True
 
@@ -295,7 +323,7 @@ class Window(ctk.CTk):
             versions=[p.name for p in sorted(folder.iterdir()) if p.is_dir() and (p/(p.name+".json")).is_file()]
             self.version_menu.configure(values=versions or ["尚未选择"])
             if self.values["version"].get() not in versions:self.values["version"].set(versions[0] if versions else "尚未选择")
-            self.suggest_run()
+            self.select_version(save=False)
             self.refresh_summary()
             if not silent:self.note(f"找到 {len(versions)} 个已安装版本")
         except (OSError,ValueError) as e:
@@ -332,7 +360,7 @@ class Window(ctk.CTk):
         self.note(message,True)
 
     def start_game(self):
-        if self.launching or (self.process and self.process.poll() is None):return
+        if self.shared or self.launching or (self.process and self.process.poll() is None):return
         if not self.save():return
         try:
             root,version,java,name,run,memory=[self.values[k].get().strip() for k in ("root","version","java","name","run","memory")]
@@ -343,7 +371,7 @@ class Window(ctk.CTk):
         self.launching=True;self.start.configure(state="disabled",text="正在准备…")
         self.game_state.configure(text="正在检查游戏文件")
         def failed(message):
-            self.launching=False;self.start.configure(state="normal",text="启动游戏   →");self.game_state.configure(text="启动未完成");self.note(message,True)
+            self.launching=False;self.start.configure(state="normal",text="离线启动   →");self.game_state.configure(text="启动未完成");self.note(message,True)
         self.task(lambda:launch(root,version,java,name,run or None,memory),self.started,failed)
 
     def started(self,process):
@@ -353,7 +381,7 @@ class Window(ctk.CTk):
     def poll_game(self):
         if self.process and self.process.poll() is not None:
             code=self.process.returncode;self.process=None
-            self.start.configure(state="normal",text="再次启动   →")
+            self.start.configure(state="disabled" if self.shared else "normal",text="离线启动   →")
             self.game_state.configure(text="游戏已结束")
             self.note(f"游戏进程结束，返回码 {code}；详细日志在运行目录 .aetherloom/logs")
         self.after(1000,self.poll_game)
@@ -403,11 +431,28 @@ class Window(ctk.CTk):
         self.task(lambda:API(url,token)(path,body,method=method),done)
 
     def rooms(self):
+        if self.rooms_busy or not self.token:return
+        self.rooms_busy=True
+        url,token=self.server_url,self.token
         def done(items):
-            for child in self.room_list.winfo_children():child.destroy()
+            self.rooms_busy=False
+            if token!=self.token or url!=self.server_url:return
+            self.refresh_failures=0
+            self.room_items={item['id']:item for item in items}
+            scroll=self.room_list._parent_canvas.yview()[0]
+            for child in self.room_list.winfo_children():
+                if not any(child is row[0] for row in self.room_rows.values()):child.destroy()
+            for key in set(self.room_rows)-set(self.room_items):
+                self.room_rows.pop(key)[0].destroy()
+            self.refresh_summary()
             if not items:self.label(self.room_list,"暂无共享房间 · 先配置游戏，再发布一个本地世界。",13,MUTED).pack(pady=30);return
             for item in items:
+                signature=json.dumps([item,self.bindings.get(item['id']),bool(self.bindings.get(item['id']) and (Path(self.bindings[item['id']]['world'])/'.aetherloom/pending-session.json').is_file())],sort_keys=True)
+                old=self.room_rows.get(item['id'])
+                if old and old[1]==signature:continue
+                if old:old[0].destroy()
                 row=ctk.CTkFrame(self.room_list,fg_color="#232532",corner_radius=8);row.pack(fill="x",padx=8,pady=5)
+                self.room_rows[item['id']]=(row,signature)
                 top=ctk.CTkFrame(row,fg_color='transparent');top.pack(fill='x',padx=14,pady=(10,4))
                 self.label(top,item.get('name') or item['id'][:12],14,bold=True).pack(side='left')
                 self.label(top,("Host "+item["host"]) if item.get("host") else "当前无 Host",12,ACCENT).pack(side='right')
@@ -417,7 +462,7 @@ class Window(ctk.CTk):
                     hint=self.label(row,'本机 '+bound['version']+' · '+bound['name']+'\n存档 '+bound['world'],11,MUTED)
                     hint.configure(wraplength=590,justify='left');hint.pack(anchor='w',padx=14,pady=(4,0))
                 buttons=ctk.CTkFrame(row,fg_color='transparent');buttons.pack(fill='x',padx=14,pady=10)
-                for title,callback in [('开始',lambda r=item:self.play_room(r)),('绑定目录',lambda r=item:self.bind_room(r)),('成员',lambda r=item:self.room_members(r))]:
+                for title,callback in [('在线启动',lambda r=item:self.play_room(r)),('选中',lambda r=item:self.select_room(r)),('绑定目录',lambda r=item:self.bind_room(r)),('成员',lambda r=item:self.room_members(r))]:
                     self.button(buttons,title,callback,width=80).pack(side='left',padx=(0,8))
                 bound=self.bindings.get(item['id'])
                 if bound and (Path(bound['world'])/'.aetherloom/pending-session.json').is_file():
@@ -427,8 +472,16 @@ class Window(ctk.CTk):
                         self.button(buttons,'上传世界',lambda r=item:self.create_room(r),width=85).pack(side='left',padx=(0,8))
                     self.button(buttons,'管理',lambda r=item:self.manage_room(r),width=70).pack(side='right',padx=(8,0))
                     self.button(buttons,'删除',lambda r=item:self.delete_room(r),width=70).pack(side='right')
-            self.note(f"已加载 {len(items)} 个共享房间；开始前先绑定本地游戏环境")
-        self.cloud_task("/api/rooms",done)
+            for item in items:
+                self.room_rows[item['id']][0].pack_forget()
+                self.room_rows[item['id']][0].pack(fill="x",padx=8,pady=5)
+            self.room_list.update_idletasks()
+            self.room_list._parent_canvas.yview_moveto(scroll)
+        def failed(error):
+            self.rooms_busy=False;self.refresh_failures=min(self.refresh_failures+1,4)
+            event('rooms.refresh.failed',error=error)
+        from .cloud import API
+        self.task(lambda:API(url,token)('/api/rooms'),done,failed)
 
     def create_room(self,existing=None):
         if self.shared or (self.process and self.process.poll() is None):self.note('请先保存退出游戏',True);return
@@ -449,8 +502,8 @@ class Window(ctk.CTk):
             if existing:
                 if existing.get('head'):raise ValueError('已有权威存档，请使用恢复候选审批，不能直接覆盖')
                 room=existing['id']
-                api('/api/rooms/'+room,dict(name=name,environment=binding['version'],world=world.name),method='PATCH')
-            else:room=api('/api/rooms',dict(name=name,environment=binding['version'],world=world.name))['id']
+                api('/api/rooms/'+room,dict(name=name,environment=encode(describe(binding['root'],binding['version'])),world=world.name),method='PATCH')
+            else:room=api('/api/rooms',dict(name=name,environment=encode(describe(binding['root'],binding['version'])),world=world.name))['id']
             self.events.put((lambda _:self.note('正在发布 '+name+'，请勿打开此世界'),None,'notification'))
             lease=api('/api/rooms/'+room+'/claim',{})
             guard=LeaseGuard(api,room,lease)
@@ -480,13 +533,15 @@ class Window(ctk.CTk):
     def bind_room(self,room):
         b=self.current_binding()
         if not b:return
+        try:validate(describe(b['root'],b['version']),room.get('environment'))
+        except (ValueError,OSError,KeyError) as e:self.note(str(e),True);return
         if not messagebox.askyesno('绑定共享房间',f"将当前本地版本 {b['version']} 绑定到房间 {room.get('name') or room['id']}？\n请确保版本、加载器和Mods与房间环境一致。\n作为Host时会将云端存档校验下载到专用世界目录。",parent=self):return
         target=Path(b['run'])/'saves'/('Aetherloom-'+room['id'])
         if (target/'.aetherloom/pending-session.json').exists():
             import uuid
             target=target.with_name(target.name+'-'+uuid.uuid4().hex[:8])
         b['world']=str(target)
-        self.bindings[room['id']]=b;self.save()
+        self.bindings[room['id']]=b;self.selected_room=room['id'];self.save()
         self.cloud_task('/api/rooms/'+room['id']+'/join',lambda _:self.note('本地环境已绑定，可以点击此房间的开始'),{})
 
     def delete_room(self,room):
@@ -503,24 +558,63 @@ class Window(ctk.CTk):
         self.button(dialog,'保存名称和连接策略',lambda:self.cloud_task('/api/rooms/'+room['id'],saved,{'name':name.get(),'mode':mode.get()},method='PATCH'),True,width=220).pack(anchor='w',padx=24,pady=8)
         self.button(dialog,'审阅并批准恢复候选',lambda:self.review_recovery(room),width=220).pack(anchor='w',padx=24,pady=8)
         if room['owner']==self.cloud_user or self.cloud_role=='root':
-            owner=ctk.CTkEntry(dialog,placeholder_text='新的Owner软件账号',height=38,fg_color=CARD,border_color=BORDER);owner.pack(fill='x',padx=24,pady=8)
+            owner=ctk.CTkOptionMenu(dialog,values=[room['owner']],height=38,fg_color=CARD,button_color=PRIMARY);owner.pack(fill='x',padx=24,pady=8)
+            self.cloud_task('/api/rooms/'+room['id']+'/account-options',lambda options:owner.winfo_exists() and owner.configure(values=[o['name'] for o in options]))
             self.button(dialog,'转移所有权',lambda:self.cloud_task('/api/rooms/'+room['id'],saved,{'owner':owner.get()},method='PATCH'),width=150).pack(anchor='w',padx=24,pady=8)
 
     def room_members(self,room):
-        def done(members):
-            dialog=ctk.CTkToplevel(self);dialog.title('共享房间成员');dialog.geometry('560x420');dialog.configure(fg_color=BG);dialog.transient(self)
-            self.label(dialog,'成员与实例权限',19,bold=True).pack(anchor='w',padx=24,pady=20)
-            listing=ctk.CTkScrollableFrame(dialog,fg_color=CARD);listing.pack(fill='both',expand=True,padx=24,pady=(0,20))
-            can_edit=room['owner']==self.cloud_user or self.cloud_role=='root'
-            def change(actor,role):
-                self.cloud_task('/api/rooms/'+room['id']+'/members',lambda _:(dialog.destroy(),self.room_members(room)),{'username':actor,'role':role})
+        if not self.token:return
+        from .cloud import API
+        api=API(self.server_url,self.token)
+        dialog=ctk.CTkToplevel(self);dialog.title('共享房间成员');dialog.geometry('600x480');dialog.configure(fg_color=BG);dialog.transient(self)
+        self.label(dialog,'成员与实例权限 · 自动更新',19,bold=True).pack(anchor='w',padx=24,pady=20)
+        listing=ctk.CTkScrollableFrame(dialog,fg_color=CARD);listing.pack(fill='both',expand=True,padx=24,pady=(0,12))
+        editable=room['owner']==self.cloud_user or self.cloud_role=='root'
+        rows={};busy=False
+        def change(actor,role):
+            self.cloud_task('/api/rooms/'+room['id']+'/members',lambda _:refresh(),{'username':actor,'role':role})
+        if editable:
+            controls=ctk.CTkFrame(dialog,fg_color='transparent');controls.pack(fill='x',padx=24,pady=(0,20))
+            target=ctk.CTkOptionMenu(controls,values=['正在读取账号'],fg_color=CARD,button_color=PRIMARY);target.pack(side='left',padx=4)
+            role=ctk.CTkOptionMenu(controls,values=['member','admin'],width=100,fg_color=CARD,button_color=PRIMARY);role.pack(side='left',padx=4)
+            self.button(controls,'添加成员',lambda:change(target.get(),role.get()),width=95).pack(side='left',padx=4)
+        def load():
+            return api('/api/rooms/'+room['id']+'/members'),api('/api/rooms/'+room['id']+'/account-options') if editable else []
+        def done(result):
+            nonlocal busy
+            busy=False
+            if not dialog.winfo_exists():return
+            members,options=result
+            scroll=listing._parent_canvas.yview()[0]
+            present={m['actor'] for m in members}
+            for key in set(rows)-present:rows.pop(key)[0].destroy()
             for member in members:
+                old=rows.get(member['actor'])
+                if old and old[1]==member['role']:continue
+                if old:old[0].destroy()
                 row=ctk.CTkFrame(listing,fg_color='transparent');row.pack(fill='x',pady=8)
+                rows[member['actor']]=(row,member['role'])
                 self.label(row,member['actor']+' · '+member['role'],13).pack(side='left',padx=8)
-                if can_edit and member['role']!='owner':
+                if editable and member['role']!='owner':
                     self.button(row,'移除',lambda a=member['actor']:change(a,'remove'),width=60).pack(side='right',padx=4)
                     self.button(row,'设成员' if member['role']=='admin' else '设管理员',lambda a=member['actor'],r=member['role']:change(a,'member' if r=='admin' else 'admin'),width=85).pack(side='right',padx=4)
-        self.cloud_task('/api/rooms/'+room['id']+'/members',done)
+            listing.update_idletasks();listing._parent_canvas.yview_moveto(scroll)
+            if editable:
+                names=[item['name'] for item in options] or ['无可用账号']
+                current=target.get();target.configure(values=names)
+                target.set(current if current in names else names[0])
+        def failed(error):
+            nonlocal busy
+            busy=False
+            if dialog.winfo_exists():self.note(error,True)
+        def refresh():
+            nonlocal busy
+            if not dialog.winfo_exists():return
+            if not busy:
+                busy=True;self.task(load,done,failed)
+        def tick():
+            if dialog.winfo_exists():refresh();self.after(5000,tick)
+        tick()
 
     def review_recovery(self,room):
         from .cloud import API
@@ -579,17 +673,85 @@ class Window(ctk.CTk):
         def notify(kind,value):
             def apply(_):
                 if kind=='process':self.started(value)
+                elif kind=='network':self.network_status(value)
                 else:self.note(value)
             self.events.put((apply,None,'notification'))
+        self.selected_room=room['id'];self.save()
         self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']]),notify,recovery)
         session=self.shared
-        self.launching=True;self.start.configure(state='disabled',text='共享会话准备中…')
+        self.network_rows.clear()
+        for widget in self.network_list.winfo_children():widget.destroy()
+        self.launching=True;self.online.configure(state='disabled',text='在线准备中…');self.start.configure(state='disabled')
         def finished(_):
             self.shared=None;self.launching=False
-            self.start.configure(state='normal' if not self.process or self.process.poll() is not None else 'disabled',text='启动游戏   →')
+            self.online.configure(state='normal',text='在线启动   →')
+            self.start.configure(state='normal' if not self.process or self.process.poll() is not None else 'disabled',text='离线启动   →')
             self.rooms()
         def failed(error):finished(None);self.note(error,True)
         self.task(lambda:asyncio.run(session.run()),finished,failed)
+
+    def remember_profile(self):
+        if self.profile_key:
+            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name')}
+
+    def select_version(self,save=True):
+        self.remember_profile()
+        previous=self.profile_key
+        self.profile_key=self.values['root'].get()+'|'+self.values['version'].get()
+        profile=self.profiles.get(self.profile_key)
+        if profile:
+            for key,value in profile.items():
+                if key in self.values:self.values[key].set(value)
+        else:
+            if previous and previous!=self.profile_key or self.values['run'].get()==self.auto_run:self.values['run'].set('')
+            self.suggest_run()
+        root,version=self.values['root'].get(),self.values['version'].get()
+        def discover():
+            from .launcher import manifest
+            required=manifest(Path(root),version).get('javaVersion',{}).get('majorVersion',17)
+            return discover_java(root,required)
+        def found(paths):
+            if root!=self.values['root'].get() or version!=self.values['version'].get():return
+            self.java_menu.configure(values=paths or ['未发现 Java，请使用浏览手动指定'])
+            current=self.values['java'].get()
+            if paths and (not current or not profile):
+                self.values['java'].set(paths[0])
+                self.note('已在游戏目录内发现 Java：'+paths[0])
+            elif not current:self.note('所选游戏目录内未找到合适 Java，请在启动参数中手动指定',True)
+            if save:self.save()
+        self.task(discover,found,lambda error:event('java.discovery.failed',error=error))
+        self.refresh_summary()
+
+    def select_room(self,room):
+        self.selected_room=room['id'];self.save()
+        self.note('在线实例已选中：'+room.get('name',room['id']))
+
+    def start_online(self):
+        if not self.token:self.show('cloud');self.note('在线启动需要登录软件账号',True);return
+        room=self.room_items.get(self.selected_room)
+        if not room:self.show('cloud');self.note('请在共享世界选择一个在线实例',True);return
+        self.play_room(room)
+
+    def auto_refresh(self):
+        if self.token and not self.login_busy:self.rooms()
+        self.after((5000 if self.page in ('cloud','home') else 15000)*2**self.refresh_failures,self.auto_refresh)
+
+    def build_network(self):
+        p=self.pages['network']
+        self.heading(p,'联机状态','显示实际流状态、P2P 打洞与中继回退；控制通道不等于游戏直连。')
+        self.network_list=ctk.CTkScrollableFrame(p,fg_color=CARD)
+        self.network_list.pack(fill='both',expand=True)
+        self.label(self.network_list,'尚未启动在线会话',13,MUTED).pack(anchor='w',padx=16,pady=16)
+
+    def network_status(self,state):
+        key=state.get('session_id','network')
+        display={k:state[k] for k in ('peer','channel','mode','active_path','relay_ready','direct_ready','switch_phase','last_reason','relay_rtt_ms','direct_rtt_ms','direct_endpoint','attempt','stage') if k in state}
+        event('network.state',stream=key,**display)
+        if key not in self.network_rows:
+            row=self.label(self.network_list,'',12,MUTED,justify='left',wraplength=650)
+            row.pack(fill='x',padx=16,pady=10);self.network_rows[key]=row
+        titles={'peer':'对端','channel':'通道','mode':'策略','active_path':'当前路径','relay_ready':'中继就绪','direct_ready':'直连验证','switch_phase':'迁移阶段','last_reason':'原因','relay_rtt_ms':'中继 RTT / ms','direct_rtt_ms':'直连 RTT / ms','direct_endpoint':'直连端点','attempt':'打洞轮次','stage':'打洞进度'}
+        self.network_rows[key].configure(text='流 '+str(key)[:12]+'\n'+'  ·  '.join(titles[k]+'：'+str(v) for k,v in display.items()))
 
     def server_status(self):
         def done(r):
@@ -601,6 +763,11 @@ class Window(ctk.CTk):
             self.shared.stop=True;self.note('正在结束共享会话并处理保存，请完成后再关闭');return
         if self.pending:self.note("正在处理请求，请稍后再关闭");return
         self.save();self.destroy()
+
+    def destroy(self):
+        from .diagnostics import close
+        close()
+        super().destroy()
 
 def main():
     ctk.set_appearance_mode("dark")
