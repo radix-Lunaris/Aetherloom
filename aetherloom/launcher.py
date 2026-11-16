@@ -143,13 +143,11 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
             require(root / "assets" / "objects" / h[:2] / h)
     if missing:
         raise LaunchError("Missing files:\n" + "\n".join(missing))
-    from .runtime import hidden_process
-    probe = subprocess.run([str(java), "-version"], capture_output=True, text=True, timeout=15, **hidden_process())
-    match = re.search(r'version "(\d+)(?:\.(\d+))?', probe.stderr + probe.stdout)
-    major = int(match[2]) if match and match[1] == "1" else int(match[1]) if match else 0
-    required = m.get("javaVersion", {}).get("majorVersion", 17)
-    if probe.returncode or major < required:
-        raise LaunchError(f"Java {required}+ required")
+    from .runtime import inspect_java,required_java,compatibility
+    required=required_java(m)
+    java_info=inspect_java(java,refresh=True)
+    reason=compatibility(java_info,required)
+    if reason:raise LaunchError(reason+'；请使用稳定的推荐版本或自动选择')
     native_dir = inside(run, ".aetherloom/natives/" + uuid.uuid4().hex)
     native_dir.mkdir(parents=True,exist_ok=True)
     cp = [java_path(p) for p in cp]

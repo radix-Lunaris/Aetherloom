@@ -52,9 +52,22 @@ class SharedSession:
         self.process=process;self.notify('process',process)
         return process
 
+    async def prepare_java(self):
+        if self.binding.get('java_mode')=='auto':
+            from .runtime import find_runtimes,required_java,choose_java
+            from .launcher import manifest
+            b=self.binding
+            self.notify('status','正在为共享实例自动选择 Java')
+            required=required_java(manifest(Path(b['root']),b['version']))
+            runtimes=await asyncio.to_thread(find_runtimes,b['root'],self.cloud.cache.root.parent/'java',known=[b.get('java')])
+            best=choose_java(runtimes,required)
+            if not best:raise ValueError(f'共享实例需要 Java {required} x64，请先在本地游戏中下载推荐运行时')
+            b['java']=best.path
+
     async def run(self):
         base='/api/rooms/'+self.room
         try:
+            await self.prepare_java()
             self.notify('status','正在核验房间权限和权威版本信息')
             items=await asyncio.to_thread(self.api,'/api/rooms')
             room=next((r for r in items if r['id']==self.room),None)
@@ -178,6 +191,7 @@ class SharedSession:
 class OfflineInspection(SharedSession):
     """Keep the interrupted original; inspect a copy without publishing LAN."""
     async def run(self):
+        await self.prepare_java()
         source=Path(self.binding['world']).resolve()
         pending=source/'.aetherloom/pending-session.json'
         if not pending.is_file():raise ValueError('此绑定目录没有待恢复的Host会话')

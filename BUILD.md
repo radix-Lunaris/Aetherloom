@@ -10,7 +10,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build-bridge.ps1
 powershell -ExecutionPolicy Bypass -File scripts/build-client.ps1
 powershell -ExecutionPolicy Bypass -File scripts/package-server.ps1
 ```
-客户端不再捆绑、下载或复制 Java。玩家游戏根目录内的 runtime/java/jdk/jre 已知布局会被有界搜索，候选来自 Java release 元数据；也可手动指定 Java。找不到合适运行时时明确阻止启动。
+客户端不再捆绑、下载或复制 Java。客户端会在已知 Java 安装位置、注册表、环境变量、用户 .jdks 和游戏／启动器的运行时专用目录有界发现，并实际探测版本与架构；也可手动指定。找不到时提供用户点击的一键官方运行时下载，默认安装到配置目录 java 下。下载目录不进入发行包，仍不要求构建机提供捆绑 JRE。
 构建两个 Java 辅助模块仍需要构建机 JDK17（JAVA_HOME）；这是构建依赖，不进入客户端包。
 CustomTkinter 来源：https://github.com/TomSchimansky/CustomTkinter （5.2.2，MIT）。
 客户端使用CustomTkinter 5.2.2，打包时收集其主题、字体和图片资源；发行包包含_internal目录，不要只复制EXE。

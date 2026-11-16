@@ -15,7 +15,7 @@ import customtkinter as ctk
 import asyncio
 from .launcher import launch, inside, game_uuid
 from . import __version__
-from .runtime import discover_java
+from .runtime import find_runtimes, required_java, choose_java, compatibility, inspect_java
 from .environment import describe, encode, validate
 from .diagnostics import setup, logger, safe, event
 
@@ -71,6 +71,12 @@ class Window(ctk.CTk):
         self.selected_room=self.settings.data.get("selected_room", "")
         self.profiles=self.settings.data.get("local_profiles", {})
         self.profile_key=None
+        self.java_busy=False
+        self.java_scan=0
+        self.java_download_cancel=None
+        self.java_choices={}
+        self.java_choice=tk.StringVar()
+        self.java_directory=self.settings.path.parent/'java'
         self.pending=0
         self.process=None
         self.token=""
@@ -88,7 +94,7 @@ class Window(ctk.CTk):
         saved_java=data.get("java","")
         self.values={key:tk.StringVar(value=str(data.get(key,default))) for key,default in
             [("root",""),("run",""),("name","Player"),("version","尚未选择"),("memory",4096),
-             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid","")]}
+             ("url","https://artherlink.superyk7hero.online:47192"),("username",""),("uuid",""),("java_mode","auto")]}
         if self.values['url'].get().rstrip('/').lower() in ('https://artherlink.superyk7hero.online','https://artherlink.superyk7hero.online:443'):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else "")
@@ -225,11 +231,21 @@ class Window(ctk.CTk):
             self.label(f,title,12,MUTED).pack(anchor="w",pady=(0,6));self.entry(f,key).pack(fill="x")
         self.label(c,'自定义 UUID · 可选，留空按名称生成；修改后须重新绑定共享房间',12,MUTED).grid(row=2,column=0,sticky='w',padx=22,pady=(10,6))
         self.entry(c,'uuid').grid(row=3,column=0,sticky='ew',padx=22)
-        self.path_row(c,4,"Java · 从所选游戏目录自动查找，也可手动指定","java",True)
-        self.java_menu=ctk.CTkOptionMenu(c,values=['尚未发现 Java'],variable=self.values['java'],fg_color=CARD,button_color=PRIMARY,command=lambda _:self.save())
-        self.java_menu.grid(row=6,column=0,sticky='ew',padx=22,pady=8)
-        self.path_row(c,8,"运行目录 · 自动识别版本隔离，可手动修改","run",False)
-        self.button(c,"保存配置",self.save,primary=True,width=120).grid(row=10,column=0,sticky="e",padx=22,pady=20)
+        modes=ctk.CTkFrame(c,fg_color='transparent');modes.grid(row=4,column=0,sticky='ew',padx=22,pady=(18,8))
+        for text,value in [('自动选择合适的 Java','auto'),('手动指定 Java','manual')]:
+            ctk.CTkRadioButton(modes,text=text,value=value,variable=self.values['java_mode'],font=self.font(13),fg_color=PRIMARY,command=self.java_mode_changed).pack(side='left',padx=(0,28))
+        self.java_hint=self.label(c,'正在准备 Java 检测',12,MUTED,wraplength=650)
+        self.java_hint.grid(row=5,column=0,sticky='w',padx=22,pady=6)
+        self.path_row(c,6,'当前 Java 可执行文件','java',True)
+        self.java_menu=ctk.CTkOptionMenu(c,values=['尚未检测'],variable=self.java_choice,fg_color=CARD,button_color=PRIMARY,command=self.choose_java_candidate,dynamic_resizing=False)
+        self.java_menu.grid(row=8,column=0,sticky='ew',padx=22,pady=8)
+        actions=ctk.CTkFrame(c,fg_color='transparent');actions.grid(row=9,column=0,sticky='ew',padx=22,pady=8)
+        self.button(actions,'重新检测 Java',self.detect_java,width=135).pack(side='left',padx=(0,10))
+        self.java_download_button=self.button(actions,'下载推荐 Java',self.download_java,width=170)
+        self.java_download_button.pack(side='left')
+        self.label(c,'从系统、注册表、用户 .jdks、游戏及启动器运行时目录发现；不读取其他启动器账号。',11,MUTED,wraplength=650).grid(row=10,column=0,sticky='w',padx=22,pady=6)
+        self.path_row(c,11,'运行目录 · 自动识别版本隔离，可手动修改','run',False)
+        self.button(c,'保存配置',self.save,primary=True,width=120).grid(row=13,column=0,sticky='e',padx=22,pady=20)
 
     def path_row(self,parent,row,title,key,file):
         self.label(parent,title,12,MUTED).grid(row=row,column=0,sticky="w",padx=22,pady=(10,6))
@@ -314,8 +330,10 @@ class Window(ctk.CTk):
         value=filedialog.askopenfilename(parent=self,title="选择 Java",filetypes=[("Java","*.exe"),("所有文件","*")]) if file else filedialog.askdirectory(parent=self,title="选择目录",initialdir=self.values[key].get() or None)
         if value:
             self.values[key].set(value)
+            if key=="java":self.values["java_mode"].set("manual");self.java_hint.configure(text="已手动指定 Java，启动前会验证版本与架构")
             if key=="root":self.load_versions()
             self.save()
+            if key=='java':self.detect_java()
 
     def load_versions(self,silent=False):
         root=self.values["root"].get().strip()
@@ -362,11 +380,12 @@ class Window(ctk.CTk):
         self.note(message,True)
 
     def start_game(self):
+        if self.java_busy:self.note('Java 正在安装，请等待完成或取消下载',True);return
         if self.shared or self.launching or (self.process and self.process.poll() is None):return
         if not self.save():return
         try:
             root,version,java,name,run,memory=[self.values[k].get().strip() for k in ("root","version","java","name","run","memory")]
-            if not root or not java or version=="尚未选择":raise ValueError("请先在本地游戏中选择游戏目录、版本和 Java")
+            if not root or (not java and self.values["java_mode"].get()=="manual") or version=="尚未选择":raise ValueError("请先在本地游戏中选择游戏目录、版本和 Java")
             memory=int(memory)
             if not 512<=memory<=65536:raise ValueError("内存范围为 512—65536 MiB")
         except ValueError as e:self.note(str(e),True);self.show("instance");return
@@ -375,7 +394,16 @@ class Window(ctk.CTk):
         def failed(message):
             self.launching=False;self.start.configure(state="normal",text="离线启动   →");self.game_state.configure(text="启动未完成");self.note(message,True)
         custom_uuid=self.values['uuid'].get().strip()
-        self.task(lambda:launch(root,version,java,name,run or None,memory,custom_uuid=custom_uuid),self.started,failed)
+        mode=self.values['java_mode'].get()
+        def start():
+            selected=self.resolve_java(root,version,java,mode)
+            return launch(root,version,selected,name,run or None,memory,custom_uuid=custom_uuid),selected
+        def done(result):
+            process,selected=result
+            if root==self.values['root'].get() and version==self.values['version'].get():
+                self.values['java'].set(selected);self.save()
+            self.started(process)
+        self.task(start,done,failed)
 
     def started(self,process):
         self.launching=False;self.process=process;self.start.configure(text="游戏运行中")
@@ -502,6 +530,7 @@ class Window(ctk.CTk):
         from .cloud import API,CloudWorld,LeaseGuard
         api=API(self.server_url,self.token)
         def publish():
+            binding['java']=self.resolve_java(binding['root'],binding['version'],binding['java'],binding.get('java_mode','manual'))
             if existing:
                 if existing.get('head'):raise ValueError('已有权威存档，请使用恢复候选审批，不能直接覆盖')
                 room=existing['id']
@@ -527,10 +556,10 @@ class Window(ctk.CTk):
         self.task(publish,done)
 
     def current_binding(self):
-        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid')}
+        b={k:self.values[k].get().strip() for k in ('root','run','version','java','name','memory','uuid','java_mode')}
         try:game_uuid(b['name'],b['uuid'])
         except ValueError as e:self.note(str(e),True);return None
-        if not b['root'] or not b['java'] or b['version']=='尚未选择':
+        if not b['root'] or (not b['java'] and b['java_mode']=='manual') or b['version']=='尚未选择':
             self.note('先在本地游戏中定位游戏目录、版本和Java',True);self.show('instance');return None
         b['run']=b['run'] or b['root']
         return b
@@ -675,6 +704,7 @@ class Window(ctk.CTk):
         self.start_session(OfflineInspection,room)
 
     def start_session(self,session_type,room,recovery=False):
+        if self.java_busy:self.note('Java 正在安装，请等待完成或取消下载',True);return
         def notify(kind,value):
             def apply(_):
                 if kind=='process':self.started(value)
@@ -697,7 +727,7 @@ class Window(ctk.CTk):
 
     def remember_profile(self):
         if self.profile_key:
-            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid')}
+            self.profiles[self.profile_key]={k:self.values[k].get() for k in ('run','java','memory','name','uuid','java_mode')}
 
     def select_version(self,save=True):
         self.remember_profile()
@@ -706,28 +736,106 @@ class Window(ctk.CTk):
         profile=self.profiles.get(self.profile_key)
         if profile:
             self.values['uuid'].set(profile.get('uuid',''))
+            self.values['java_mode'].set(profile.get('java_mode','auto'))
             for key,value in profile.items():
                 if key in self.values:self.values[key].set(value)
         else:
-            if previous and previous!=self.profile_key:self.values['uuid'].set('')
+            if previous and previous!=self.profile_key:
+                self.values['uuid'].set('');self.values['java_mode'].set('auto')
             if previous and previous!=self.profile_key or self.values['run'].get()==self.auto_run:self.values['run'].set('')
             self.suggest_run()
+        self.detect_java(save=save)
+        self.refresh_summary()
+
+    def java_mode_changed(self):
+        self.save();self.detect_java(save=False)
+
+    def choose_java_candidate(self,label):
+        path=self.java_choices.get(label)
+        if not path:return
+        self.values['java_mode'].set('manual');self.values['java'].set(path)
+        self.save();self.detect_java(save=False)
+
+    def resolve_java(self,root,version,current,mode):
+        from .launcher import manifest
+        required=required_java(manifest(Path(root),version))
+        if mode=='manual':
+            info=inspect_java(current)
+            reason=compatibility(info,required)
+            if reason:raise ValueError(reason+'；请改用自动选择或下载推荐 Java')
+            return info.path
+        runtimes=find_runtimes(root,self.java_directory,known=[current])
+        best=choose_java(runtimes,required)
+        if not best:raise ValueError(f'未找到稳定的64位 Java {required}，请在本地游戏点击“下载推荐 Java {required}”')
+        return best.path
+
+    def detect_java(self,save=False):
         root,version=self.values['root'].get(),self.values['version'].get()
+        if not root or version=='尚未选择':return
+        self.java_scan+=1;generation=self.java_scan
+        current=self.values['java'].get()
+        self.java_hint.configure(text='正在检测已安装 Java 的版本与架构…')
         def discover():
             from .launcher import manifest
-            required=manifest(Path(root),version).get('javaVersion',{}).get('majorVersion',17)
-            return discover_java(root,required)
-        def found(paths):
-            if root!=self.values['root'].get() or version!=self.values['version'].get():return
-            self.java_menu.configure(values=paths or ['未发现 Java，请使用浏览手动指定'])
-            current=self.values['java'].get()
-            if paths and (not current or not profile):
-                self.values['java'].set(paths[0])
-                self.note('已在游戏目录内发现 Java：'+paths[0])
-            elif not current:self.note('所选游戏目录内未找到合适 Java，请在启动参数中手动指定',True)
+            required=required_java(manifest(Path(root),version))
+            return required,find_runtimes(root,self.java_directory,known=[current])
+        def found(result):
+            if generation!=self.java_scan or root!=self.values['root'].get() or version!=self.values['version'].get():return
+            required,runtimes=result;best=choose_java(runtimes,required)
+            self.java_choices={}
+            for info in runtimes:
+                reason=compatibility(info,required)
+                label=f'{info.version} ({info.bits}位) · {info.source} · '+Path(info.path).parent.parent.name
+                if reason:label+=' · 不推荐'
+                if label in self.java_choices:label+=' · '+info.path
+                self.java_choices[label]=info.path
+                event('java.discovered',version=info.version,architecture=info.architecture,source=info.source,path=info.path,reason=reason)
+            self.java_menu.configure(values=list(self.java_choices) or ['未找到 Java，可下载推荐版本或手动指定'])
+            if self.values['java_mode'].get()=='auto':
+                self.values['java'].set(best.path if best else '')
+                hint=f'自动选择：Java {best.version} · 64位 · {best.source}' if best else f'需要稳定的64位 Java {required}：未找到，可点击下方一键下载'
+            else:
+                try:current_path=str(Path(self.values['java'].get()).resolve())
+                except (OSError,ValueError):current_path=''
+                selected=next((r for r in runtimes if r.path==current_path),None)
+                hint='手动指定：'+(compatibility(selected,required) or '版本与架构匹配') if selected else f'手动指定路径未通过检测；此实例需要 Java {required} x64'
+            self.java_hint.configure(text=hint)
+            chosen=next((label for label,path in self.java_choices.items() if path==self.values['java'].get()),'未找到匹配项')
+            self.java_choice.set(chosen)
+            if not self.java_busy:self.java_download_button.configure(text=f'下载推荐 Java {required}')
             if save:self.save()
-        self.task(discover,found,lambda error:event('java.discovery.failed',error=error))
-        self.refresh_summary()
+        def failed(error):
+            if generation!=self.java_scan:return
+            self.java_hint.configure(text='Java 检测失败：'+error);self.note(error,True)
+        self.task(discover,found,failed)
+
+    def download_java(self):
+        if self.java_busy:
+            self.java_download_cancel.set();self.java_download_button.configure(text='正在取消…',state='disabled');return
+        if self.shared or self.launching or self.process and self.process.poll() is None:
+            self.note('请先结束游戏及共享会话，再安装运行时',True);return
+        root,version=self.values['root'].get(),self.values['version'].get()
+        try:
+            from .launcher import manifest
+            required=required_java(manifest(Path(root),version))
+        except (ValueError,OSError,KeyError) as e:self.note(str(e),True);return
+        cancel=threading.Event();self.java_download_cancel=cancel;self.java_busy=True
+        self.java_download_button.configure(text='取消 Java 下载')
+        def progress(text):
+            self.events.put((lambda message:self.note(message),text,'notification'))
+        def install():
+            from .java_download import install_runtime
+            return install_runtime(required,self.java_directory,progress=progress,cancel=cancel)
+        def complete():
+            self.java_busy=False;self.java_download_cancel=None
+            self.java_download_button.configure(state='normal',text=f'下载推荐 Java {required}')
+        def done(path):
+            complete()
+            if root==self.values['root'].get() and version==self.values['version'].get():
+                self.values['java_mode'].set('auto');self.values['java'].set(path);self.save();self.detect_java()
+            self.note('Java 安装完成；未修改系统环境变量，可直接启动游戏')
+        def failed(error):complete();self.note(error,True)
+        self.task(install,done,failed)
 
     def select_room(self,room):
         self.selected_room=room['id'];self.save()

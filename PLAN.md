@@ -1,7 +1,7 @@
 # Aetherloom 首版计划
 ## 范围
 独立 Windows 客户端，自研最小启动层，用户手动绑定完整 .minecraft、版本和运行目录。不扫盘、不下载游戏、不安装加载器、不导入导出整合包。首个验收：1.20.1 / Forge47.4.22。
-未登录可普通启动；软件账号与Minecraft账号独立。当前 dev 发行包不捆绑 Java，从所选游戏根目录发现运行时或由用户手动指定。
+未登录可普通启动；软件账号与Minecraft账号独立。当前 dev 发行包不捆绑 Java，从已知系统／用户／游戏运行时位置自动发现并选择，缺失时用户点击下载官方运行时，或手动指定。
 ECS权威存档，玩家电脑轮流计算。一个持久实例房间对应一个环境一个世界，Owner无需在线。
 root/admin/player、Owner/Instance Admin/Member、Host/Player分层。实例管理员由Owner或root任免，Host不自动获得管理权。
 默认租约60s，5s续租，事务唯一Host，递增epoch，提交检查父版本、租约、身份。

@@ -22,7 +22,7 @@ class Game:
 
 with tempfile.TemporaryDirectory() as d:
     root=Path(d);version=root/'game/versions/test-forge';version.mkdir(parents=True)
-    (version/'test-forge.json').write_text('{}')
+    (version/'test-forge.json').write_text('{"javaVersion":{"majorVersion":17}}')
     ctk.set_appearance_mode('dark')
     window=Window(root/'settings');window.withdraw()
     try:
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as d:
         wait(window,lambda:bool(dispatched))
         assert dispatched==[('done',main_thread)]
         game=Game()
-        with patch('aetherloom.gui.launch',return_value=game) as launch:
+        with patch.object(window,'resolve_java',return_value=str(root/'java.exe')),patch('aetherloom.gui.launch',return_value=game) as launch:
             window.start_game()
             wait(window,lambda:window.process is game)
             assert launch.call_args.args[3]=='OfflinePlayer'
@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory() as d:
         window.values['uuid'].set('81f14300-fbc1-4a46-88f0-0d90db478198')
         window.values['run'].set(str(root/'custom-run'));window.save()
         alternate=root/'game/versions/test-two';(alternate/'mods').mkdir(parents=True)
-        (alternate/'test-two.json').write_text('{}')
+        (alternate/'test-two.json').write_text('{"javaVersion":{"majorVersion":17}}')
         window.values['version'].set('test-two');window.select_version(save=False)
         # Windows runners may expose Temp through a junction or short path;
         # compare the directory identity rather than its display spelling.
@@ -80,6 +80,33 @@ with tempfile.TemporaryDirectory() as d:
         assert window.values['run'].get()==str(root/'custom-run')
         assert window.values['uuid'].get()=='81f14300-fbc1-4a46-88f0-0d90db478198'
         wait(window,lambda:window.pending==0)
+        # Java detection and installation must remain on workers, preserve
+        # manual choices, and switch to the matching stable major in auto mode.
+        from aetherloom.runtime import JavaRuntime
+        old_java=JavaRuntime(str(root/'old/bin/java.exe'),'17.0.15',17,64,'amd64',source='test')
+        wrong_java=JavaRuntime(str(root/'new/bin/java.exe'),'25.0.3',25,64,'amd64',source='test')
+        installed=JavaRuntime(str(root/'downloaded/bin/java.exe'),'17.0.21',17,64,'amd64',source='Aetherloom')
+        with patch('aetherloom.gui.find_runtimes',return_value=[old_java,wrong_java]) as discovery:
+            window.values['java_mode'].set('auto');window.detect_java()
+            wait(window,lambda:window.pending==0)
+            assert window.values['java'].get()==old_java.path
+            label=next(label for label,path in window.java_choices.items() if path==wrong_java.path)
+            window.choose_java_candidate(label);wait(window,lambda:window.pending==0)
+            assert window.values['java_mode'].get()=='manual'
+            assert window.values['java'].get()==wrong_java.path
+            def install(major,directory,progress,cancel):
+                assert major==17 and directory==window.settings.path.parent/'java'
+                progress('test download progress');return installed.path
+            discovery.return_value=[old_java,wrong_java,installed]
+            with patch('aetherloom.java_download.install_runtime',side_effect=install):
+                window.download_java();wait(window,lambda:window.pending==0)
+                assert window.values['java_mode'].get()=='auto'
+                assert window.values['java'].get()==installed.path
+            def cancelling(major,directory,progress,cancel):
+                assert cancel.wait(5);raise ValueError('Java download cancelled')
+            with patch('aetherloom.java_download.install_runtime',side_effect=cancelling):
+                window.download_java();window.download_java();wait(window,lambda:window.pending==0)
+                assert not window.java_busy and window.values['java'].get()==installed.path
         for page in ('home','instance','cloud','network','logs'):window.show(page);window.update()
         print('Desktop smoke passed: navigation, installed versions, UI-thread dispatch, launch/exit, login, private settings.')
     finally:window.destroy()
