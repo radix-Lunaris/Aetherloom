@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, room TEXT, parent TEXT,
 
     def put_blob(self, data):
         h = hashlib.sha256(data).hexdigest()
-        dest = inside(self.root / "blobs", h[:2]+"/"+h)
+        # The authority root already exists. A first parallel write may
+        # create blobs/ while Windows is resolving the destination.
+        dest = inside(self.root, f"blobs/{h[:2]}/{h}")
         dest.parent.mkdir(parents=True,exist_ok=True)
         temp = dest.with_name(dest.name + '.' + uuid.uuid4().hex + '.tmp')
         with temp.open('xb') as f:

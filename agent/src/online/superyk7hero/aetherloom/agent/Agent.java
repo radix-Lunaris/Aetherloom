@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.BiConsumer;
+import java.util.function.UnaryOperator;
 import java.util.jar.JarFile;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -24,7 +25,8 @@ public final class Agent {
     static volatile boolean connecting;
     static volatile boolean modernApi;
     static volatile boolean neoForge;
-    static volatile boolean fabric;
+    static volatile boolean directHooks;
+    static boolean earlyProfile;
     static boolean configurationApi,postTickApi;
     static Object hostProfile,haltedServer;
     static Object handledBackup;
@@ -77,51 +79,56 @@ public final class Agent {
                 if(exact!=null)names.load(exact);
             }
         }
-        if(adapter.endsWith("-fabric") || adapter.endsWith("-quilt")) {
+        boolean knot=adapter.endsWith("-fabric") || adapter.endsWith("-quilt");
+        boolean vanilla=adapter.endsWith("-vanilla");
+        if(knot || vanilla) {
             Properties aliases=new Properties();
-            InputStream resource=named?null:Agent.class.getResourceAsStream("/fabric-"+version+".properties");
-            if(!named && resource==null) {
+            String prefix=vanilla?"/vanilla-":"/fabric-";
+            InputStream resource=named?null:Agent.class.getResourceAsStream(prefix+version+".properties");
+            if(knot && !named && resource==null) {
                 String baseline=fabricBaseline(version);
                 resource=Agent.class.getResourceAsStream("/fabric-"+baseline+".properties");
                 System.out.println("AETHERLOOM_AGENT_MAPPING_BASELINE requested="+version+" baseline="+baseline+" runtime capabilities required");
             }
+            if(vanilla && !named && resource==null)throw new IllegalArgumentException("Missing exact vanilla mapping for "+version);
             if(resource!=null)try(InputStream source=resource) {aliases.load(source);}
             instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(new File(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI())));
             hooks=Class.forName("online.superyk7hero.aetherloom.agent.BootstrapHooks",true,null);
             hooks.getField("lifecycle").set(null,(BiConsumer<Object,String>)Agent::serverLifecycle);
-            hooks.getField("identity").set(null,(Consumer<Object>)Agent::profileIdentity);
-            instrumentation.addTransformer(new LoaderTransformer(aliases));
-            names.clear();names.putAll(aliases);fabric=true;
+            hooks.getField("identity").set(null,(UnaryOperator<Object>)Agent::profileIdentity);
+            earlyProfile=named;
+            instrumentation.addTransformer(new LoaderTransformer(aliases,earlyProfile));
+            names.clear();names.putAll(aliases);directHooks=true;
         }
         Thread worker=new Thread(()->{
             try {
                 long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(10);
                 while(gameLoader==null && System.nanoTime()<deadline) {
                     for(Class<?> type:instrumentation.getAllLoadedClasses())
-                        if(type.getName().equals("net.minecraft.client.Minecraft") || fabric && type.getName().equals(names.getProperty("class.net.minecraft.client.Minecraft"))) {gameLoader=type.getClassLoader();break;}
+                        if(type.getName().equals("net.minecraft.client.Minecraft") || directHooks && type.getName().equals(names.getProperty("class.net.minecraft.client.Minecraft"))) {gameLoader=type.getClassLoader();break;}
                     if(gameLoader==null) Thread.sleep(100);
                 }
                 if(gameLoader==null) throw new IllegalStateException("Game loader discovery timed out");
                 Thread.currentThread().setContextClassLoader(gameLoader);
-                if(fabric)exposeBootstrapBridge();
+                if(knot)exposeBootstrapBridge();
                 try {Class.forName("net.neoforged.neoforge.common.NeoForge",false,gameLoader);neoForge=true;}
                 catch(ClassNotFoundException forge) {neoForge=false;}
                 // QuickPlay can construct Minecraft while Forge is still setting
                 // up its event bus. Register only after mod loading completes.
-                while((minecraft()==null || !fabric && Boolean.TRUE.equals(call(type("net.minecraftforge.client.loading.ClientModLoader"),"isLoading"))) && System.nanoTime()<deadline)Thread.sleep(100);
+                while((minecraft()==null || !directHooks && Boolean.TRUE.equals(call(type("net.minecraftforge.client.loading.ClientModLoader"),"isLoading"))) && System.nanoTime()<deadline)Thread.sleep(100);
                 try {type("net.minecraft.client.multiplayer.ServerData$Type");modernApi=true;}
                 catch(ClassNotFoundException legacyApi) {modernApi=false;}
-                if(!fabric) {
+                if(!directHooks) {
                     try {type("net.minecraftforge.event.network.GatherLoginConfigurationTasksEvent");configurationApi=!neoForge;}catch(ClassNotFoundException missing){configurationApi=false;}
                     try {type("net.minecraftforge.event.TickEvent$ClientTickEvent$Post");postTickApi=true;}catch(ClassNotFoundException missing){postTickApi=false;}
                 }
-                if(fabric)emit("capabilities",0);else install();
-                while(!exitRequested && (fabric || !finished)) {
+                if(directHooks)emit("capabilities",0);else install();
+                while(!exitRequested && (directHooks || !finished)) {
                     if(!finished)stop=request("",null).contains("\"stop\": true");
-                    if(fabric && tickPending.compareAndSet(false,true)) {
+                    if(directHooks && tickPending.compareAndSet(false,true)) {
                         ((Executor)minecraft()).execute(()->{try{tick();}catch(Throwable error){fail(error);}finally{tickPending.set(false);}});
                     }
-                    Thread.sleep(fabric?100:500);
+                    Thread.sleep(directHooks?100:500);
                 }
             } catch(Throwable error) {fail(error);}
         },"Aetherloom agent bootstrap");worker.setDaemon(true);worker.start();
@@ -134,7 +141,7 @@ public final class Agent {
             else if(name.startsWith("net.minecraftforge.eventbus."))name=name.replace("net.minecraftforge.eventbus.","net.neoforged.bus.");
             else if(name.startsWith("net.minecraftforge."))name=name.replace("net.minecraftforge.","net.neoforged.neoforge.");
         }
-        if(fabric)name=names.getProperty("class."+name,name);
+        if(directHooks)name=names.getProperty("class."+name,name);
         return Class.forName(name,true,gameLoader);
     }
     static String[] aliases(Class<?> owner,String name) {
@@ -156,7 +163,7 @@ public final class Agent {
         Class<?> owner=object instanceof Class?(Class<?>)object:object.getClass();
         Set<Method> matches=new HashSet<Method>();
         for(Class<?> c=owner;c!=null;c=c.getSuperclass()) for(String alias:aliases(c,name))
-            for(Method m:c.getDeclaredMethods()) if(!m.isBridge() && m.getName().equals(alias) && compatible(m.getParameterTypes(),args)) matches.add(m);
+            for(Method m:c.getDeclaredMethods()) if(!m.isBridge() && Modifier.isStatic(m.getModifiers())==(object instanceof Class) && m.getName().equals(alias) && compatible(m.getParameterTypes(),args)) matches.add(m);
         if(name.equals("getConnection") && type("net.minecraft.client.Minecraft").isInstance(object)) {
             Class<?> expected=type("net.minecraft.client.multiplayer.ClientPacketListener");
             matches.removeIf(method->!expected.isAssignableFrom(method.getReturnType()));
@@ -238,12 +245,12 @@ public final class Agent {
             }
         }catch(NoSuchFieldException quiltIsolation) { /* Quilt uses a different parent routing policy. */ }
     }
-    static void profileIdentity(Object profile) {
-        if(config.containsKey("join") || Boolean.parseBoolean(config.getProperty("inspect")))return;
+    static Object profileIdentity(Object profile) {
+        if(config.containsKey("join") || Boolean.parseBoolean(config.getProperty("inspect")))return profile;
         try {
-            if(profile==hostProfile)return;
-            if(!loaded && UUID.fromString(config.getProperty("identity")).equals(call(profile,"getId"))) {hostProfile=profile;return;}
-            verifyIdentity(profile);
+            if(profile==hostProfile)return profile;
+            if(!loaded && UUID.fromString(config.getProperty("identity")).equals(profileId(profile))) {hostProfile=profile;return profile;}
+            return resolveProfile(profile,registeredUuid(profile));
         }catch(Throwable error){fail(error);throw new IllegalStateException("Managed peer identity rejected",error);}
     }
     static void serverLifecycle(Object server,String phase) {
@@ -255,19 +262,39 @@ public final class Agent {
             if(phase.equals("saved") && server==haltedServer && loaded && reports.isEmpty()) {loaded=false;emit("saved",0);}
         }catch(Throwable error){fail(error);}
     }
-    static void verifyIdentity(Object profile) throws Exception {
-        String name=(String)call(profile,"getName");
-        String lookup="littleskin".equals(config.getProperty("auth_mode"))?"by-uuid/"+call(profile,"getId"):URLEncoder.encode(name,"UTF-8");
+    static UUID profileId(Object profile) throws Exception {
+        try {return (UUID)call(profile,"getId");}
+        catch(NoSuchMethodException record){return (UUID)call(profile,"id");}
+    }
+    static String profileName(Object profile) throws Exception {
+        try {return (String)call(profile,"getName");}
+        catch(NoSuchMethodException record){return (String)call(profile,"name");}
+    }
+    static UUID registeredUuid(Object profile) throws Exception {
+        boolean external="littleskin".equals(config.getProperty("auth_mode"));
+        String lookup=external?"by-uuid/"+profileId(profile):URLEncoder.encode(profileName(profile),"UTF-8");
         String response=request("/identity/"+lookup,null);
         java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\\"uuid\\\"\\s*:\\s*\\\"([0-9a-fA-F-]{36})\\\"").matcher(response);
         if(!match.find())throw new IllegalStateException("Unregistered peer identity");
         UUID id=UUID.fromString(match.group(1));
-        if("littleskin".equals(config.getProperty("auth_mode"))) {
-            if(!id.equals(call(profile,"getId")))throw new IllegalStateException("Verified LittleSkin UUID mismatch");
-            return;
+        if(external && !id.equals(profileId(profile)))throw new IllegalStateException("Verified LittleSkin UUID mismatch");
+        return id;
+    }
+    static Object resolveProfile(Object profile,UUID id) throws Exception {
+        if(id.equals(profileId(profile)))return profile;
+        if(profile.getClass().getSuperclass().getName().equals("java.lang.Record")) {
+            Object properties=call(profile,"properties");
+            return profile.getClass().getConstructor(UUID.class,String.class,properties.getClass()).newInstance(id,profileName(profile),properties);
         }
         Field identity=profile.getClass().getDeclaredField("id");identity.setAccessible(true);identity.set(profile,id);
-        if(!id.equals(call(profile,"getId")))throw new IllegalStateException("UUID application failed");
+        if(!id.equals(profileId(profile)))throw new IllegalStateException("UUID application failed");
+        return profile;
+    }
+    static void verifyIdentity(Object profile) throws Exception {
+        UUID id=registeredUuid(profile);
+        if(!id.equals(profileId(profile)) && profile.getClass().getSuperclass().getName().equals("java.lang.Record"))
+            throw new IllegalStateException("Loader login cannot replace this immutable profile");
+        resolveProfile(profile,id);
     }
     static void configurationIdentity(Object event) throws Exception {
         if(config.containsKey("join") || Boolean.parseBoolean(config.getProperty("inspect")))return;
@@ -306,7 +333,8 @@ public final class Agent {
         return Files.isSameFile((Path)call(server,"getWorldPath",resource),Paths.get(config.getProperty("world")));
     }
     static void leave(Object mc) throws Exception {
-        Object level=field(mc,"level");if(level!=null)call(level,"disconnect");
+        Object level=field(mc,"level");
+        if(level!=null)try{call(level,"disconnect");}catch(NoSuchMethodException newer){/* Minecraft owns disconnect. */}
         Object server=call(mc,"getSingleplayerServer");if(server!=null)call(server,"halt",false);
         Object title=make("net.minecraft.client.gui.screens.TitleScreen");
         try {call(mc,modern()?"disconnect":"clearLevel",title);}
@@ -315,10 +343,14 @@ public final class Agent {
             catch(NoSuchMethodException newer){call(mc,"disconnect",title,false);}
         }
     }
+    static Object screen(Object mc) throws Exception {
+        try {return field(mc,"screen");}
+        catch(NoSuchFieldException newer){return call(field(mc,"gui"),"screen");}
+    }
     static void tick() throws Exception {
         Object mc=minecraft(),player=field(mc,"player"),level=field(mc,"level"),server=call(mc,"getSingleplayerServer");
         if(!stop && !worldOpenRequested && server==null && Boolean.parseBoolean(config.getProperty("open_world"))) {
-            Object screen=field(mc,"screen");
+            Object screen=screen(mc);
             if(type("net.minecraft.client.gui.screens.TitleScreen").isInstance(screen)) {
                 worldOpenRequested=true;
                 String folder=Paths.get(config.getProperty("world")).getFileName().toString();
@@ -341,7 +373,7 @@ public final class Agent {
             emitStats(count);
         }
         if(config.containsKey("join")) {
-            Object screen=field(mc,"screen");
+            Object screen=screen(mc);
             if(connecting && !joined && screen!=null && type("net.minecraft.client.gui.screens.DisconnectedScreen").isInstance(screen)) {
                 String reason="server rejected the connection";
                 try {
@@ -357,12 +389,19 @@ public final class Agent {
         if(finished && level==null && server==null) {exitRequested=true;call(mc,"stop");return;}
         Object candidate=pending;
         if(candidate!=null && server==candidate && player!=null && level!=null) {
-            if(fabric && (!hooks.getField("serverInstalled").getBoolean(null) || !hooks.getField("profileInstalled").getBoolean(null)))throw new IllegalStateException("Required lifecycle/identity hooks were not installed");
+            if(directHooks && (
+                !hooks.getField("serverInstalled").getBoolean(null)
+                || !hooks.getField("profileInstalled").getBoolean(null)
+                || (earlyProfile && !hooks.getField("profileLookupInstalled").getBoolean(null))
+            ))throw new IllegalStateException("Required lifecycle/identity hooks were not installed");
             pending=null;int port=0;
             if(!Boolean.parseBoolean(config.getProperty("inspect"))) {
                 try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
                 call(server,"setUsesAuthentication","littleskin".equals(config.getProperty("auth_mode")));
-                if(!Boolean.TRUE.equals(call(server,"publishServer",call(server,"getDefaultGameType"),false,port)))throw new IllegalStateException("LAN publication failed");
+                Object scope;
+                try {scope=field(type("net.minecraft.server.MinecraftServer$MultiplayerScope"),"LAN");}
+                catch(ClassNotFoundException older){scope=call(server,"getDefaultGameType");}
+                if(!Boolean.TRUE.equals(call(server,"publishServer",scope,false,port)))throw new IllegalStateException("LAN publication failed");
             }
             checkIdentity(player);loaded=true;emit("ready",port);
         }
@@ -381,7 +420,7 @@ public final class Agent {
         return false;
     }
     static void confirmSelectedBackup(Object mc) throws Exception {
-        Object screen=field(mc,"screen");if(screen==null || screen==handledBackup)return;
+        Object screen=screen(mc);if(screen==null || screen==handledBackup)return;
         if(!type("net.minecraft.client.gui.screens.BackupConfirmScreen").isInstance(screen))return;
         Object listener=field(screen,"onProceed");
         if(!capturedSelected(listener,0,Collections.newSetFromMap(new IdentityHashMap<Object,Boolean>())))throw new IllegalStateException("Backup confirmation is not bound to the selected managed world");
@@ -393,9 +432,15 @@ public final class Agent {
         throw new NoSuchMethodException("Backup continuation capability");
     }
     static void join(Object mc) throws Exception {
-        if(pinger==null && type("net.minecraft.client.gui.screens.TitleScreen").isInstance(field(mc,"screen"))) {
+        if(pinger==null && type("net.minecraft.client.gui.screens.TitleScreen").isInstance(screen(mc))) {
             Object serverType=modern()?field(type("net.minecraft.client.multiplayer.ServerData$Type"),"LAN"):Boolean.FALSE;
             target=make("net.minecraft.client.multiplayer.ServerData","Aetherloom",config.getProperty("join"),serverType);
+            if(config.getProperty("adapter").endsWith("-vanilla")) {
+                // The controller already obtained the ready Host and opened
+                // the relay proxy. Vanilla does not need a loader status ping.
+                connect(mc);
+                return;
+            }
             pinger=make("net.minecraft.client.multiplayer.ServerStatusPinger");
             try {call(pinger,"pingServer",target,(Runnable)()->{},(Runnable)()->{});}
             catch(NoSuchMethodException alternate){
@@ -410,16 +455,19 @@ public final class Agent {
         if(pinger!=null) {
             call(pinger,"tick");
             if(((Number)field(target,"ping")).longValue()>=0) {
-                call(pinger,"removeAll");pinger=null;connecting=true;
-                Object address=call(type("net.minecraft.client.multiplayer.resolver.ServerAddress"),"parseString",config.getProperty("join"));
-                Object title=make("net.minecraft.client.gui.screens.TitleScreen");
-                try {call(type("net.minecraft.client.gui.screens.ConnectScreen"),"startConnecting",title,mc,address,target,false,null);}
-                catch(NoSuchMethodException older){
-                    Class<?> connect=type("net.minecraft.client.gui.screens.ConnectScreen");
-                    try {call(connect,"startConnecting",title,mc,address,target,false);}
-                    catch(NoSuchMethodException legacy){call(connect,"startConnecting",title,mc,address,target);}
-                }
-            } else if(System.nanoTime()>joinDeadline)throw new IllegalStateException((neoForge?"NeoForge":fabric?"Fabric/Quilt":"Forge")+" discovery timeout");
+                call(pinger,"removeAll");pinger=null;connect(mc);
+            } else if(System.nanoTime()>joinDeadline)throw new IllegalStateException(config.getProperty("adapter")+" discovery timeout");
+        }
+    }
+    static void connect(Object mc) throws Exception {
+        connecting=true;
+        Object address=call(type("net.minecraft.client.multiplayer.resolver.ServerAddress"),"parseString",config.getProperty("join"));
+        Object title=make("net.minecraft.client.gui.screens.TitleScreen");
+        Class<?> targetScreen=type("net.minecraft.client.gui.screens.ConnectScreen");
+        try {call(targetScreen,"startConnecting",title,mc,address,target,false,null);}
+        catch(NoSuchMethodException older){
+            try {call(targetScreen,"startConnecting",title,mc,address,target,false);}
+            catch(NoSuchMethodException legacy){call(targetScreen,"startConnecting",title,mc,address,target);}
         }
     }
     static String quote(String value) {
@@ -429,20 +477,38 @@ public final class Agent {
     }
     static void checkIdentity(Object player) throws Exception {
         UUID expected=UUID.fromString(config.getProperty("identity"));
-        if((modern() || fabric) && config.containsKey("join") && !"littleskin".equals(config.getProperty("auth_mode")) && !expected.equals(call(player,"getUUID"))) {
+        if((modern() || directHooks) && config.containsKey("join") && !"littleskin".equals(config.getProperty("auth_mode")) && !expected.equals(call(player,"getUUID"))) {
             // Forge 52's configuration barrier runs after the login profile
             // packet. The Host validates and applies the member UUID before
             // loading player data; align the offline client's earlier profile.
             Object profile=call(player,"getGameProfile");
-            UUID vanilla=UUID.nameUUIDFromBytes(("OfflinePlayer:"+call(profile,"getName")).getBytes(StandardCharsets.UTF_8));
+            UUID vanilla=UUID.nameUUIDFromBytes(("OfflinePlayer:"+profileName(profile)).getBytes(StandardCharsets.UTF_8));
             if(!vanilla.equals(call(player,"getUUID")))throw new IllegalStateException("Unexpected offline login identity");
-            Field id=profile.getClass().getDeclaredField("id");id.setAccessible(true);id.set(profile,expected);
             Object connection=call(minecraft(),"getConnection");
-            Object localProfile=call(connection,"getLocalGameProfile");id.set(localProfile,expected);
+            Object localProfile=call(connection,"getLocalGameProfile");
+            Object corrected=resolveProfile(profile,expected);
+            Object correctedLocal=resolveProfile(localProfile,expected);
+            if(corrected!=profile)replaceProfileField(player,"gameProfile",profile,corrected);
+            if(correctedLocal!=localProfile)replaceProfileField(connection,"localGameProfile",localProfile,correctedLocal);
             call(player,"setUUID",expected);
             System.out.println("AETHERLOOM_AGENT_OFFLINE_CONFIGURATION_IDENTITY_ALIGNED");
         }
         if(!expected.equals(call(player,"getUUID")))throw new IllegalStateException("Actual player UUID differs from managed identity");
+    }
+    static void replaceProfileField(Object instance,String name,Object previous,Object replacement) throws Exception {
+        for(Class<?> owner=instance.getClass();owner!=null;owner=owner.getSuperclass()) {
+            for(String alias:aliases(owner,name)) {
+                Field member;
+                try {member=owner.getDeclaredField(alias);}
+                catch(NoSuchFieldException ignored){continue;}
+                if(member.getType()!=previous.getClass() || Modifier.isStatic(member.getModifiers()))continue;
+                member.setAccessible(true);
+                if(member.get(instance)!=previous)continue;
+                member.set(instance,replacement);
+                return;
+            }
+        }
+        throw new NoSuchFieldException("Cannot replace immutable player profile "+name);
     }
     static void emit(String event,int port) {
         // Never block a render/server thread on HTTP.

@@ -30,6 +30,10 @@ def select_backend(binding):
         environment['minecraft'], environment['loader'], loader_family(environment)
     ) == ('1.20.1', 'forge', '47'):
         return 'bridge'
-    if environment['loader'] not in ('forge', 'neoforge', 'fabric', 'quilt'):
-        raise ValueError('该实例可以离线启动，共享联机需要 Forge、NeoForge、Fabric 或 Quilt')
+    if environment['loader'] == 'vanilla':
+        from .vanilla_control import supports_vanilla_control
+        if not supports_vanilla_control(environment['minecraft']):
+            raise ValueError('该原版尚无对应联机控制，仍可离线启动')
+    elif environment['loader'] not in ('forge', 'neoforge', 'fabric', 'quilt'):
+        raise ValueError('当前加载器没有联机控制实现')
     return 'agent'

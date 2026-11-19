@@ -46,6 +46,21 @@ public class RepairChecks {
         Files.writeString(badBackup.resolve("aetherloom-playerdata-backups"),"blocked");
         fail(()->AetherloomRepair.repair(badBackup,B,false));
         assert java.util.Arrays.equals(original,Files.readAllBytes(badBackup.resolve("level.dat")));
+        Path referenced=base.resolve("referenced-player");
+        Path referencedData=referenced.resolve("players/data");
+        Files.createDirectories(referencedData);
+        Tag referencedRoot=Tag.newCompound(), referencedLevel=Tag.newCompound();
+        referencedLevel.put("singleplayer_uuid",Tag.ofUuid(A));
+        referencedRoot.put("Data",referencedLevel);
+        NbtIo.writeCompressed(referencedRoot,referenced.resolve("level.dat"));
+        NbtIo.writeCompressed(player(A,31),referencedData.resolve(A+".dat"));
+        NbtIo.writeCompressed(player(B,72),referencedData.resolve(B+".dat"));
+        fail(()->AetherloomRepair.repair(referenced,B,true));
+        AetherloomRepair.repair(referenced,A,true);
+        AetherloomRepair.repair(referenced,B,false);
+        assert !NbtIo.readCompressed(referenced.resolve("level.dat")).getCompound("Data").contains("singleplayer_uuid");
+        assert NbtIo.readCompressed(referencedData.resolve(A+".dat")).getInt("XpLevel",0)==31;
+        assert NbtIo.readCompressed(referencedData.resolve(B+".dat")).getInt("XpLevel",0)==72;
         System.out.println("Repair checks passed: single-world, stale external conflict, verified save, unknown/zero UUID, corrupt NBT, idempotence, backup failure");
     }
 }

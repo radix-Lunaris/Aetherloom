@@ -12,7 +12,7 @@ public class AetherloomRepair {
     }
     public static void repair(Path world, UUID target, boolean completedSession) throws Exception {
         world=world.toRealPath();
-        for (String name:new String[]{"level.dat","playerdata","aetherloom-playerdata-backups"})
+        for (String name:new String[]{"level.dat","playerdata","players","players/data","aetherloom-playerdata-backups"})
             if (Files.isSymbolicLink(world.resolve(name))) throw new IOException("World symlinks are unsupported");
         if (Uuids.isNil(target)) throw new IOException("Invalid zero UUID");
         Path level=world.resolve("level.dat");
@@ -22,7 +22,11 @@ public class AetherloomRepair {
         if (Files.exists(targetData)) NbtIo.readCompressed(targetData);
         Tag player=data.getCompound("Player");
         if (data.contains("Player") && player==null) throw new IOException("Invalid Player compound");
-        if (data.contains("singleplayer_uuid")) throw new IOException("This helper supports Minecraft 1.20.1 only");
+        if (data.contains("singleplayer_uuid")) {
+            if (player!=null) throw new IOException("Mixed embedded and referenced player data");
+            repairReferencedPlayer(world,level,root,data,target,completedSession);
+            return;
+        }
         if (player==null) return;
         UUID owner=Uuids.fromIntArray(player.getIntArray("UUID"));
         if (Uuids.isNil(owner)) throw new IOException("Embedded player ownership is unknown; manual review required");
@@ -51,6 +55,38 @@ public class AetherloomRepair {
         Path levelTemp=world.resolve("level.dat.aetherloom-"+UUID.randomUUID()+".tmp");
         NbtIo.writeCompressed(root,levelTemp);
         replace(levelTemp,level);
+    }
+
+    private static void repairReferencedPlayer(Path world, Path level, Tag root, Tag data,
+                                               UUID target, boolean completedSession) throws Exception {
+        UUID owner=Uuids.fromIntArray(data.getIntArray("singleplayer_uuid"));
+        if (Uuids.isNil(owner)) throw new IOException("Invalid singleplayer UUID reference");
+        Path directory=world.resolve("players/data");
+        Path ownerFile=directory.resolve(owner+".dat");
+        Path targetFile=directory.resolve(target+".dat");
+        if (Files.isSymbolicLink(ownerFile) || Files.isSymbolicLink(targetFile))
+            throw new IOException("Player symlinks are unsupported");
+        if (!Files.isRegularFile(ownerFile)) throw new IOException("Referenced player data is missing");
+        NbtIo.readCompressed(ownerFile);
+        if (completedSession) {
+            if (!owner.equals(target)) throw new IOException("Saved player reference differs from verified Host identity");
+            return;
+        }
+        if (owner.equals(target)) return;
+        // Remove the previous host's singleplayer override. Minecraft loads
+        // the new host by their own UUID in players/data, or creates a player.
+        if (Files.exists(targetFile)) NbtIo.readCompressed(targetFile);
+        Path backup=world.resolve("aetherloom-playerdata-backups").resolve(UUID.randomUUID().toString());
+        Files.createDirectories(backup);
+        Files.copy(level,backup.resolve("level.dat"));
+        data.remove("singleplayer_uuid");
+        Path temp=world.resolve("level.dat.aetherloom-"+UUID.randomUUID()+".tmp");
+        try {
+            NbtIo.writeCompressed(root,temp);
+            replace(temp,level);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
     public static void main(String[] args) {
         try {

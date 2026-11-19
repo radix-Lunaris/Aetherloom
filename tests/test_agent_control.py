@@ -54,3 +54,18 @@ class AgentControlTests(unittest.TestCase):
             with self.subTest(loader=loader, release=release), patch('aetherloom.environment.describe',
                 return_value={'minecraft':release,'loader':loader,'loader_version':version}):
                 self.assertEqual(select_backend(binding),expected)
+
+    def test_vanilla_requires_a_control_mapping_or_named_runtime(self):
+        from unittest.mock import patch
+        binding = {'root':'installed', 'version':'vanilla', 'control_backend':'auto'}
+        for version, supported in (
+            ('1.13.2',False), ('1.14.3',False), ('1.14.4',True),
+            ('1.19.2',True), ('1.21.11',True), ('26.3',True),
+        ):
+            with self.subTest(version=version), patch('aetherloom.environment.describe',
+                return_value={'minecraft':version,'loader':'vanilla','loader_version':''}):
+                if supported:
+                    self.assertEqual(select_backend(binding),'agent')
+                else:
+                    with self.assertRaisesRegex(ValueError,'仍可离线启动'):
+                        select_backend(binding)
