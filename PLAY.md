@@ -80,6 +80,8 @@
 
 ## 实验 Agent 加载器
 
+正式补丁的启动核对、Java 建议和已实测联机组合见[版本兼容表](COMPATIBILITY.md)。
+
 选择已安装的游戏实例后，客户端自动选用其 Java 和对应联机控制。原有房间绑定也按实例自动选择，Forge 1.20.1／47 优先使用 Bridge，其余 Forge、NeoForge、Fabric、Quilt 使用 Agent。高级设置可对 Forge 1.20.1 优先使用 Agent。房间仍检查 Minecraft 版本，玩家需准备能互相联机的模组环境。
 
 Host 在预备阶段同步并校验权威世界，然后自动进入所选世界。没有 Quick Play 的版本使用自己的世界打开接口。Player 按本地代理地址自动加入。Fabric／Quilt 不要求额外控制 Mod 或 Fabric API。升级到较新的 Minecraft、加载器或整合包时先在测试房间验证联机和存档；拥有映射的组合仍需通过运行时检查。使用外部启动器专用引导的配置需换成同版本标准加载器配置。

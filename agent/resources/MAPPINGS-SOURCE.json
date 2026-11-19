@@ -3,12 +3,92 @@
   "derived_hash_format": "ASCII with LF line endings",
   "sources": [
     {
+      "minecraft": "1.14.4",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/6073e4ba6949217eb708c4512be2ccc1850a603f/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.14.4/intermediary-1.14.4-v2.jar",
+      "mojang_mapping_sha256": "2dd53a5e70ba493cf6e33c0fc52bbdf4c57f9429c7a13842565aa825fd44d910",
+      "fabric_intermediary_sha256": "0d7786a3d6a4926a818d4cbb79ced019578f85ecc6ffdecb6d6725b5bd2706ea",
+      "derived_sha256": "a4f4cc536ed4bd7026a5e708e05103a4531c7c5f8dff6088fa5f7bca284a0421"
+    },
+    {
+      "minecraft": "1.15",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/580c412cfa5869318a3a02d6b018a83781bf3ae7/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.15/intermediary-1.15-v2.jar",
+      "mojang_mapping_sha256": "11415bc25024658f0ef1c1a0028df282135299e526a689de2f29c4662edf931a",
+      "fabric_intermediary_sha256": "c87a3b68e0a50b8b26683c920590f4d1f96115a43438a6d4a8cff01cece6bcd5",
+      "derived_sha256": "06a6427120143dae4d8fe01fd58b21806410d9a690723b7b9d8b972dc19c25e4"
+    },
+    {
+      "minecraft": "1.15.1",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/054ee5085ec49b6d037d10d43c04fd4c9c3b9f4b/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.15.1/intermediary-1.15.1-v2.jar",
+      "mojang_mapping_sha256": "f46186d0ed9d17e073e16ae2c98675dbbc70b4a29495700837aa5de9c1b42c34",
+      "fabric_intermediary_sha256": "4475ad61ec1f3764927cca400aee93f589699a2a1aadb930928aec5331c681e9",
+      "derived_sha256": "628c98a791b9d338dae0551f97823a825517e7bdfff47082514105d4d60a9d47"
+    },
+    {
+      "minecraft": "1.15.2",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/1fbf9f0bc9c326af859b3ccf71c2a8f5edc47ef8/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.15.2/intermediary-1.15.2-v2.jar",
+      "mojang_mapping_sha256": "65ad295b6cf63821f5d8f961c128128475e6d39386358d22eb238a3ce6e31777",
+      "fabric_intermediary_sha256": "95fcc58cc3ab9900c60d335bcb8830a425076ade7648bfe2c4fcf05f2e70a0d6",
+      "derived_sha256": "628c98a791b9d338dae0551f97823a825517e7bdfff47082514105d4d60a9d47"
+    },
+    {
+      "minecraft": "1.16",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/9539840a7dbea682b305858fe138bd03ee7823cf/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.16/intermediary-1.16-v2.jar",
+      "mojang_mapping_sha256": "53d46abe149aadd367be8789207c53a7cee46ba8382e5bfd60247eb22984119d",
+      "fabric_intermediary_sha256": "6be11c154485056d0b0899946ae8a57391827be613afdf143f1bfe172c7fba18",
+      "derived_sha256": "9aed42479ba1937f18f8bc8427293f2dd07d2373b1e90f224c48a9efc8207e5a"
+    },
+    {
+      "minecraft": "1.16.1",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/ddf517a4f6750f4c15189de4e03246ae1f916cf5/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.16.1/intermediary-1.16.1-v2.jar",
+      "mojang_mapping_sha256": "6cc374f819bca44d940f8912044b07bdac3e240a02e37117ae1d4ad63c21409b",
+      "fabric_intermediary_sha256": "1daffb2da1503d79ab3f9ea3cf258ec5045cc41204d2a1151321e26652f3c654",
+      "derived_sha256": "9aed42479ba1937f18f8bc8427293f2dd07d2373b1e90f224c48a9efc8207e5a"
+    },
+    {
+      "minecraft": "1.16.2",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/16d12d67cd5341bfc848340f61f3ff6b957537fe/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.16.2/intermediary-1.16.2-v2.jar",
+      "mojang_mapping_sha256": "c95a7046ab43371cc476b8b51978c6f2155c62f4cc5756b05c8ef81e0f11691f",
+      "fabric_intermediary_sha256": "7c43185c3692b419954940a82351805372168bf9bc768f1325cab818435fe263",
+      "derived_sha256": "3237ee8b93b69793d9aab0558a5b5afb46dd6a66012262b85bf1d3fe9b17a3bc"
+    },
+    {
+      "minecraft": "1.16.3",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/faac5028fbca3859db970cc4ca041aeec55f6d9d/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.16.3/intermediary-1.16.3-v2.jar",
+      "mojang_mapping_sha256": "c41c58faaf3a3b651d8883b9b1df355cb6ad59c4d6296b2e1ffc3dfe2bf9be3e",
+      "fabric_intermediary_sha256": "6f729f4ca6f186caaf41469a9e5452bc5b6b08ed29de459d21c0cabfd5fc2e8c",
+      "derived_sha256": "3237ee8b93b69793d9aab0558a5b5afb46dd6a66012262b85bf1d3fe9b17a3bc"
+    },
+    {
+      "minecraft": "1.16.4",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/0837de813d1a6b67e23da3c520a84e872c8d2f0e/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.16.4/intermediary-1.16.4-v2.jar",
+      "mojang_mapping_sha256": "93f188a0038fec8c2402d78e7acca983680978d6a9237c1fab80f22caddb00fe",
+      "fabric_intermediary_sha256": "b2157a586b938bfbb97bc19b79b002026808c47c661cba85a71492c8c2caa8ab",
+      "derived_sha256": "d617798cf2fd0bf033946744ac24a2ddb1eb192dceb880f07ab25d20a7b64d83"
+    },
+    {
       "minecraft": "1.16.5",
       "mojang_url": "https://piston-data.mojang.com/v1/objects/374c6b789574afbdc901371207155661e0509e17/client.txt",
       "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.16.5/intermediary-1.16.5-v2.jar",
       "mojang_mapping_sha256": "7931ed6d723eceb1d621d05a76e10ddf643bf468c6ecf1c4ecf377bd72cf8b8c",
       "fabric_intermediary_sha256": "d2e35bbd6aa35c2fe0880e064ea428cb7e2355010903ebad67e4048348bc25a0",
       "derived_sha256": "d617798cf2fd0bf033946744ac24a2ddb1eb192dceb880f07ab25d20a7b64d83"
+    },
+    {
+      "minecraft": "1.17",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/227d16f520848747a59bef6f490ae19dc290a804/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.17/intermediary-1.17-v2.jar",
+      "mojang_mapping_sha256": "191b957aaa40b294402feef29651ae7a9f1263ec22c5382f3b8fa0a4918b0471",
+      "fabric_intermediary_sha256": "73fdcc1ac44a1cd373933432564559d666150c98ed4e3a3146314f84c50663a2",
+      "derived_sha256": "19c85f4e4d188bce14d23468f436d5e880e17e2c1ac835c460522a15f0d52642"
     },
     {
       "minecraft": "1.17.1",
@@ -19,12 +99,44 @@
       "derived_sha256": "19c85f4e4d188bce14d23468f436d5e880e17e2c1ac835c460522a15f0d52642"
     },
     {
+      "minecraft": "1.18",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/e824c89c612c0b9cb438ef739c44726c59bbf679/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.18/intermediary-1.18-v2.jar",
+      "mojang_mapping_sha256": "b4c7d514328050fa09ac04818d21e4be0b58e75c6b0847e56ce09f6637b8877b",
+      "fabric_intermediary_sha256": "3033dd59051fb3077cb53b9143ea76825741512cbde6b417e568a93d5339ce28",
+      "derived_sha256": "dcd811872e621c811baf03426de3df252cc49b3ff75993cfa9a4ce20d4f297a6"
+    },
+    {
+      "minecraft": "1.18.1",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/99ade839eacf69b8bed88c91bd70ca660aee47bb/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.18.1/intermediary-1.18.1-v2.jar",
+      "mojang_mapping_sha256": "a7a4109255dfb74b9552b339482f0714bb0e7e7143d1059b0bf62a526d2c2a84",
+      "fabric_intermediary_sha256": "95382a2c002351560282ded0ab2cc8bacd17596a1e2939468ff95a2e19da41c6",
+      "derived_sha256": "dcd811872e621c811baf03426de3df252cc49b3ff75993cfa9a4ce20d4f297a6"
+    },
+    {
       "minecraft": "1.18.2",
       "mojang_url": "https://piston-data.mojang.com/v1/objects/a661c6a55a0600bd391bdbbd6827654c05b2109c/client.txt",
       "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.18.2/intermediary-1.18.2-v2.jar",
       "mojang_mapping_sha256": "a2aa6ee1030bfef79e9b2e08e79de1637fdd7ecb5bf8891cf2e9a4b186042543",
       "fabric_intermediary_sha256": "fc9863bf2f3e93478b24f1c71c2ce316ebd9f768f408ab3a25cd575bf31340df",
       "derived_sha256": "1db41ac3a0f291a9a154ebc1ba8060a101b9f6470534801d33aa2d960c7f9966"
+    },
+    {
+      "minecraft": "1.19",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/150346d1c0b4acec0b4eb7f58b86e3ea1aa730f3/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.19/intermediary-1.19-v2.jar",
+      "mojang_mapping_sha256": "9e31de7fc15b1bac0e58abc441a5e56c320266112feaea981bcffd41dd6201e1",
+      "fabric_intermediary_sha256": "4657eaac57a3474db3c2ee8843087dede87c5ab8560904b1d27f1b36d24fbdb4",
+      "derived_sha256": "cb45c9704ec363c243967eb9b45805d9e2aaa55ac66f4f88947d2e1611ba3a4e"
+    },
+    {
+      "minecraft": "1.19.1",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/fc8e22d42c0e4eb1899e2acf7e97eae917e1cb94/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.19.1/intermediary-1.19.1-v2.jar",
+      "mojang_mapping_sha256": "9b2dfe745719f4de1ce3fb23baeb24e31623c1fcc249e39bbdb068ad7f600236",
+      "fabric_intermediary_sha256": "c5eb93cc90a6b18f20d3402566a9643f7865677a22bac6ab52e8b94d4b6a2276",
+      "derived_sha256": "c66b9e8dab3dc033c8633ac9e9c86e6e8630c5257c513ca586217cd6cb13e7d9"
     },
     {
       "minecraft": "1.19.2",
@@ -35,12 +147,28 @@
       "derived_sha256": "c66b9e8dab3dc033c8633ac9e9c86e6e8630c5257c513ca586217cd6cb13e7d9"
     },
     {
+      "minecraft": "1.19.3",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/42366909cc612e76208d34bf1356f05a88e08a1d/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.19.3/intermediary-1.19.3-v2.jar",
+      "mojang_mapping_sha256": "f72a4675ae77fa16966a0338567e30ee3a64bb7476932e264e8b25937f664a1b",
+      "fabric_intermediary_sha256": "9b27e0cac7139ab842aa00d6a9771343a27d85a44b6ee3744dc89182694adf81",
+      "derived_sha256": "530110b2d787f7500c0a700b9c7877eb8da20dbbde005362157dc9e12a490acc"
+    },
+    {
       "minecraft": "1.19.4",
       "mojang_url": "https://piston-data.mojang.com/v1/objects/f14771b764f943c154d3a6fcb47694477e328148/client.txt",
       "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.19.4/intermediary-1.19.4-v2.jar",
       "mojang_mapping_sha256": "5ef270b938f89cfc77371e0deee9f9044c41d9a373fa11dcb1fd1923272c4606",
       "fabric_intermediary_sha256": "b50ac85a813e42b49deb127214643494dc9b434e637df737149a0a82c392e364",
       "derived_sha256": "a8dd632b060f8c34fa8df6a1fffcd889633beb5aaea9cade85ea43fc5adf1790"
+    },
+    {
+      "minecraft": "1.20",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/a4cd9a97400f7ecfe4dba23e427549ebc5815d66/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.20/intermediary-1.20-v2.jar",
+      "mojang_mapping_sha256": "fdd921d6bcc7657850f78514d36bb57af0b8a340786d12c46ec18d9c46c039de",
+      "fabric_intermediary_sha256": "0c2ad1c013702de04c24365aeaa6e93608bddd5d739face1386cf2dfcbf08b7d",
+      "derived_sha256": "913369c6d1d5088574d1e958298f5d325dc4c28788ad4d67614723479e1068b2"
     },
     {
       "minecraft": "1.20.1",
@@ -59,12 +187,28 @@
       "derived_sha256": "5a74f57ee772d7a000a51fc99cf50356e76e376c942059135d954df68bab2739"
     },
     {
+      "minecraft": "1.20.3",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/be76ecc174ea25580bdc9bf335481a5192d9f3b7/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.20.3/intermediary-1.20.3-v2.jar",
+      "mojang_mapping_sha256": "ad03c803d866062909dd378ed5f1611687dc0ed0a76cc7fd57e968a99d641e5f",
+      "fabric_intermediary_sha256": "9fb0359e51a3e40b48ebacb92522adfffc9a884c743332d51d369fc0f6db5392",
+      "derived_sha256": "49b9764d026c3b142e99947da1bf82b1a6196ac4323256d10658220c098bdcbd"
+    },
+    {
       "minecraft": "1.20.4",
       "mojang_url": "https://piston-data.mojang.com/v1/objects/be76ecc174ea25580bdc9bf335481a5192d9f3b7/client.txt",
       "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.20.4/intermediary-1.20.4-v2.jar",
       "mojang_mapping_sha256": "ad03c803d866062909dd378ed5f1611687dc0ed0a76cc7fd57e968a99d641e5f",
       "fabric_intermediary_sha256": "c2df2c16cfdbf291a748aa937c80e79dc74cf7a3ef6266891d370a0e1f03cc4f",
       "derived_sha256": "49b9764d026c3b142e99947da1bf82b1a6196ac4323256d10658220c098bdcbd"
+    },
+    {
+      "minecraft": "1.20.5",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/65b1468c44fbf34382716416b5c1a16d2949217a/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.20.5/intermediary-1.20.5-v2.jar",
+      "mojang_mapping_sha256": "9afdb3b7fcc4c6acbec3bc6ccb46192bfc6460e12bf9e268e29bfee46bc7fbac",
+      "fabric_intermediary_sha256": "28046838cdc3b2407113abd676744a5f87d263fedc424933b7b9c0acebdc4b7e",
+      "derived_sha256": "b657fccc2a0c94bcbd4541f3ae3c4cb7f612b00340382407975fe762ac0f31ba"
     },
     {
       "minecraft": "1.20.6",
@@ -75,12 +219,28 @@
       "derived_sha256": "b657fccc2a0c94bcbd4541f3ae3c4cb7f612b00340382407975fe762ac0f31ba"
     },
     {
+      "minecraft": "1.21",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/0530a206839eb1e9b35ec86acbbe394b07a2d9fb/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21/intermediary-1.21-v2.jar",
+      "mojang_mapping_sha256": "127485d79248d4ae2955a7d061c3626d38853ecb054c4d008707732264b0aac1",
+      "fabric_intermediary_sha256": "5567849f76f552ec3dac68bbb1da92d345e588bc28416cc176bfb9dda1bfd1ec",
+      "derived_sha256": "21af784249b8392255ebf9c79a9f98939e797fe52576c54a9e27359b2226ae3f"
+    },
+    {
       "minecraft": "1.21.1",
       "mojang_url": "https://piston-data.mojang.com/v1/objects/2244b6f072256667bcd9a73df124d6c58de77992/client.txt",
       "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.1/intermediary-1.21.1-v2.jar",
       "mojang_mapping_sha256": "140c47931cccc8fc9e4c22d7603e2d714d1a953a146f51ea7397d95c955536ec",
       "fabric_intermediary_sha256": "e8bd6a4c39e235ee2dc73063558610775c72a2572fa0c6b32915b149074012a6",
       "derived_sha256": "21af784249b8392255ebf9c79a9f98939e797fe52576c54a9e27359b2226ae3f"
+    },
+    {
+      "minecraft": "1.21.2",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/ce0ed2eb99175df9ec5166324e3fdd1f87cee827/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.2/intermediary-1.21.2-v2.jar",
+      "mojang_mapping_sha256": "e37560e4889168916a73dbc4922c563002eff70fbecfe1cf5c50a7b222f451b2",
+      "fabric_intermediary_sha256": "36969d35833530fca85a48fc33bb29c4f10f80efd635a4e3d8f5b2df40e38c6f",
+      "derived_sha256": "63737c211f2ee91ae2fe122bb1f94c6f115f3eec4bd6e08b367b2a0f547d6543"
     },
     {
       "minecraft": "1.21.3",
@@ -107,12 +267,36 @@
       "derived_sha256": "2740b2710ef6d02fa5df8ca4c05a99d02a52557ea65e2eb0dd7537b0d85fc623"
     },
     {
+      "minecraft": "1.21.6",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/848855615bc81e3db1c85e69b6afb150807a1261/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.6/intermediary-1.21.6-v2.jar",
+      "mojang_mapping_sha256": "2ff82b34ce5f849aaafdff51e23b9448c4263881238b780a441fe1061a6fc261",
+      "fabric_intermediary_sha256": "a5f6839bac61b7aa67acd6a33b955efcce2b2dafd3612088a1644a515ab67e79",
+      "derived_sha256": "13731c933911366f4cb83b8262c36f1cbf0d5adf678b83c9bd116c21ec18eedb"
+    },
+    {
+      "minecraft": "1.21.7",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/8d83af626cae1865deaf55fbf96934be4886fd45/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.7/intermediary-1.21.7-v2.jar",
+      "mojang_mapping_sha256": "328f2c5849c7c5fc4f2b1eae4f74a7cfe6bb337c7938242ac5c4f9eac89b1e50",
+      "fabric_intermediary_sha256": "7b7ba4c8f8fc315be0c0f949a3d373130debc9782f817ff978fe005078ca4156",
+      "derived_sha256": "13731c933911366f4cb83b8262c36f1cbf0d5adf678b83c9bd116c21ec18eedb"
+    },
+    {
       "minecraft": "1.21.8",
       "mojang_url": "https://piston-data.mojang.com/v1/objects/bdeb624c3aefba11d9d40f34bc96176350b549b6/client.txt",
       "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.8/intermediary-1.21.8-v2.jar",
       "mojang_mapping_sha256": "dce035fedcc047ce0306c69892176b5eb9036bcc2845c87198163f12bb1d67ca",
       "fabric_intermediary_sha256": "28c5e58cc82093327498edc7c62561b22421c8e80f51f3f90edb156b9b60262d",
       "derived_sha256": "13731c933911366f4cb83b8262c36f1cbf0d5adf678b83c9bd116c21ec18eedb"
+    },
+    {
+      "minecraft": "1.21.9",
+      "mojang_url": "https://piston-data.mojang.com/v1/objects/3641ccb54eac2153c7e8274823c5a8e046beaba0/client.txt",
+      "fabric_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.9/intermediary-1.21.9-v2.jar",
+      "mojang_mapping_sha256": "f223e9775abb66b6712c505cb1a73b48d615efebaf43a9f81dd58df9a9b1c7b3",
+      "fabric_intermediary_sha256": "6a7a4523a8c215e512148407ce815c261853ed853192ee6ca5363eaeb0dd2bf1",
+      "derived_sha256": "e173730ba26c0d8397a20e69b20074d0a6ef2d2752dd8cd4a10b3a5850567fe8"
     },
     {
       "minecraft": "1.21.10",

@@ -48,7 +48,10 @@ public final class Agent {
         for(String candidate:index.getProperty(family,"").split(",")) {
             if(candidate.isEmpty())continue;
             int distance=Math.abs(patch-Integer.parseInt(candidate));
-            if(distance<nearest){nearest=distance;selected=family+"."+candidate;}
+            if(distance<nearest){
+                nearest=distance;
+                selected=candidate.equals("0")?family:family+"."+candidate;
+            }
         }
         return selected;
     }
