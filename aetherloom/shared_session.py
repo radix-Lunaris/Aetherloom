@@ -10,11 +10,11 @@ import uuid
 from .bridge_control import BridgeControl
 from .cloud import API,CloudWorld,LeaseGuard
 from .launcher import launch,offline_uuid,game_uuid
-from .network import Network
+from .network import Network,verify_host_listener
 from .world_lock import closed_world
 from .runtime import hidden_process
 from .environment import describe,validate,validate_account
-from .game_control import select_backend,agent_config
+from .game_control import select_backend,agent_config,check_agent_package
 from .vanilla_control import CALAMUS_VANILLA_RELEASES,FABRIC_114_RELEASES,name_data_identity
 
 
@@ -111,7 +111,7 @@ class SharedSession:
 
     def install_control(self,run):
         if self.backend=='agent':
-            if not (assets()/'aetherloom-agent.jar').is_file():raise ValueError('交付包缺少实验Agent')
+            check_agent_package(assets()/'aetherloom-agent.jar')
             return
         jar=assets()/'aetherloom-bridge-0.1.1.jar'
         if not jar.is_file():raise ValueError('交付包缺少Bridge')
@@ -241,6 +241,11 @@ class SharedSession:
                     if self.stop:self.bridge.stop=True
                     if self.process.poll() is not None or time.monotonic()>deadline:raise ValueError('游戏未报告世界/LAN就绪，本地数据保留，请检查游戏日志')
                     await asyncio.sleep(.25)
+                self.notify('status','游戏已开放 LAN，正在验证本机联机端口')
+                await asyncio.to_thread(verify_host_listener,self.bridge.port)
+                if self.bridge.error:raise ValueError(self.bridge.error)
+                if self.bridge.saved.is_set() or self.process.poll() is not None:
+                    raise ValueError('世界在联机就绪前已退出，本地存档保留')
                 self.guard.check()
                 host_task=self.network.spawn(self.network.host(self.room,self.bridge.port,on_identity=self.bridge.register_peer))
                 await asyncio.to_thread(self.api,base+'/ready',credentials)

@@ -2,10 +2,20 @@
 import asyncio
 import contextlib
 import json
+import socket
 import threading
 import weakref
 from urllib.parse import urlsplit, urlunsplit
 from .vendor.craftlink.auto_stream import AutoManager, AutoStream, Config, TcpPath, Kind
+
+
+def verify_host_listener(port):
+    """Probe the exact loopback endpoint the Host tunnel will use."""
+    try:
+        with socket.create_connection(('127.0.0.1',port),timeout=2):
+            pass
+    except OSError as error:
+        raise ValueError(f'游戏已报告 LAN 端口 {port}，但本机联机代理无法连接') from error
 
 
 class PolicyStream(AutoStream):

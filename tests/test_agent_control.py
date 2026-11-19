@@ -3,12 +3,32 @@ import tempfile
 import unittest
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 from aetherloom.bridge_control import BridgeControl
-from aetherloom.game_control import agent_config,CAPABILITIES,select_backend
+from aetherloom.game_control import AGENT_PREMAIN,CAPABILITIES,agent_config,check_agent_package,select_backend
 from aetherloom.launcher import offline_uuid
 
 class AgentControlTests(unittest.TestCase):
+    def test_agent_package_preflight_rejects_missing_or_corrupt_resources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'agent.jar'
+            class_entry=AGENT_PREMAIN.replace('.','/')+'.class'
+            with self.assertRaisesRegex(ValueError,'缺少'):
+                check_agent_package(path)
+            path.write_bytes(b'invalid jar')
+            with self.assertRaisesRegex(ValueError,'损坏'):
+                check_agent_package(path)
+            for entrypoint,version in (('other.Class',52),(AGENT_PREMAIN,61),(AGENT_PREMAIN,52)):
+                with zipfile.ZipFile(path,'w') as archive:
+                    archive.writestr('META-INF/MANIFEST.MF',f'Manifest-Version: 1.0\r\nPremain-Class: {entrypoint}\r\n\r\n')
+                    archive.writestr(class_entry,b'\xca\xfe\xba\xbe\x00\x00'+version.to_bytes(2,'big'))
+                if entrypoint==AGENT_PREMAIN and version==52:
+                    check_agent_package(path)
+                else:
+                    with self.assertRaisesRegex(ValueError,'损坏'):
+                        check_agent_package(path)
+
     def test_capabilities_identity_and_save_barriers(self):
         with tempfile.TemporaryDirectory() as directory:
             control=BridgeControl(Path(directory)/'世界',offline_uuid('Host'),backend='agent')

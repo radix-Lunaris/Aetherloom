@@ -2,8 +2,34 @@
 import json
 from pathlib import Path
 import uuid
+import zipfile
+import zlib
 
 CAPABILITIES=('world','lan','join','identity','saved','exit')
+AGENT_PREMAIN='online.superyk7hero.aetherloom.agent.Agent'
+
+
+def check_agent_package(path):
+    """Validate the bundled Agent before a game or a cloud lease is started."""
+    if not path.is_file():
+        raise ValueError('交付包缺少游戏控制 Agent，请重新下载 Aetherloom')
+    try:
+        with zipfile.ZipFile(path) as archive:
+            if sum(entry.file_size for entry in archive.infolist()) > 16 * 1024 * 1024:
+                raise ValueError('Unexpected Agent package size')
+            with archive.open('META-INF/MANIFEST.MF') as manifest:
+                main_section=manifest.read().decode('ascii').replace('\r\n','\n').split('\n\n',1)[0]
+            entry=AGENT_PREMAIN.replace('.','/')+'.class'
+            if 'Premain-Class: '+AGENT_PREMAIN not in main_section.splitlines():
+                raise ValueError('Wrong Agent entry point')
+            with archive.open(entry) as bytecode:
+                header=bytecode.read(8)
+            if len(header)!=8 or header[:4]!=b'\xca\xfe\xba\xbe' or int.from_bytes(header[6:8],'big')!=52:
+                raise ValueError('Invalid Agent entry class')
+            if archive.testzip() is not None:
+                raise ValueError('Agent CRC mismatch')
+    except (OSError,ValueError,KeyError,RuntimeError,zipfile.BadZipFile,zlib.error) as error:
+        raise ValueError('交付包中的 Agent 已损坏或版本不匹配，请重新下载 Aetherloom') from error
 
 def agent_config(control, *, open_world=False):
     data=json.loads(control.config.read_text(encoding='utf-8'))

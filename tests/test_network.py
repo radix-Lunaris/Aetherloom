@@ -8,12 +8,25 @@ import unittest
 from unittest.mock import patch
 import uvicorn
 from aetherloom.cloud import API
-from aetherloom.network import Network
+from aetherloom.network import Network,verify_host_listener
 from aetherloom.server import create_app,add_user
 from aetherloom.vendor.craftlink.auto_stream import Frame,Kind
 
 
 class NetworkTests(unittest.TestCase):
+    def test_host_probe_requires_a_listening_loopback_socket(self):
+        with socket.socket() as local:
+            local.bind(('127.0.0.1',0))
+            local.settimeout(2)
+            port=local.getsockname()[1]
+            with self.assertRaisesRegex(ValueError,str(port)):
+                verify_host_listener(port)
+            local.listen(1)
+            verify_host_listener(port)
+            connection,_=local.accept()
+            with connection:
+                self.assertEqual(connection.recv(1),b'')
+
     def test_real_websocket_and_udp_transport(self):
         with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{'AETHERLOOM_P2P_BIND':'127.0.0.1:0'}),self.assertNoLogs('uvicorn.error',level='ERROR'):
             app=create_app(d)
