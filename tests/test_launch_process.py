@@ -30,7 +30,16 @@ class LaunchProcessTests(unittest.TestCase):
                 "arguments":{"jvm":["-DignoreList=forge-,${version_name}.jar,${primary_jar_name}"],"game":["--username","${auth_player_name}","--gameDir","${game_directory}","--clientId","${clientid}","--xuid","${auth_xuid}","--primaryJar","${primary_jar}","--primaryName","${primary_jar_name}","--libraries","${libraries_directory}","--separator","${file_separator}"]}}),encoding="utf-8")
             (run/"forge.json").write_text(json.dumps({"id":"forge","inheritsFrom":base_id}),encoding="utf-8")
             indexes=root/"assets/indexes";indexes.mkdir(parents=True)
-            (indexes/"test.json").write_text('{"objects":{}}')
+            import hashlib
+            payload = b"legacy asset"
+            digest = hashlib.sha1(payload).hexdigest()
+            blob = root/"assets"/"objects"/digest[:2]/digest
+            blob.parent.mkdir(parents=True)
+            blob.write_bytes(payload)
+            (indexes/"test.json").write_text(json.dumps({
+                "virtual": True, "map_to_resources": True,
+                "objects": {"sample.txt": {"hash": digest}},
+            }))
             process=launch(root,"forge",java,"OfflineUser",run,512)
             code=process.wait(timeout=20)
             logs=list((run/".aetherloom/logs").glob("*.log"))
@@ -44,6 +53,8 @@ class LaunchProcessTests(unittest.TestCase):
                 other=launch(root,"forge",java,"OfflineUser",run,512)
                 self.assertEqual(other.wait(timeout=20),0)
             self.assertIn("OfflineUser",(run/"started.txt").read_text(encoding="utf-8"))
+            self.assertEqual((root/"assets/virtual/test/sample.txt").read_bytes(),payload)
+            self.assertEqual((run/"resources/sample.txt").read_bytes(),payload)
             arguments=(run/"started.txt").read_text(encoding="utf-8").split('|')
             self.assertEqual(Path(arguments[arguments.index('--gameDir')+1]).resolve(),run.resolve())
             primary=Path(arguments[arguments.index('--primaryJar')+1])

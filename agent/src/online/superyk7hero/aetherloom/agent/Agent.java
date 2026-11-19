@@ -28,12 +28,30 @@ public final class Agent {
     static boolean configurationApi,postTickApi;
     static Object hostProfile,haltedServer;
     static Object handledBackup;
+    static boolean worldOpenRequested;
     static Class<?> hooks;
     static final AtomicBoolean tickPending=new AtomicBoolean();
     static long joinDeadline;
     static final Set<String> reports=Collections.synchronizedSet(new HashSet<String>());
     static final AtomicBoolean statsPending=new AtomicBoolean();
     static long nextStats;
+
+    static String fabricBaseline(String version) throws IOException {
+        int nearest=Integer.MAX_VALUE;
+        String selected="1.21.1";
+        java.util.regex.Matcher release=java.util.regex.Pattern.compile("^(1\\.\\d+)(?:\\.(\\d+))?(?:-|$)").matcher(version);
+        if(!release.find())return selected;
+        String family=release.group(1);
+        int patch=release.group(2)==null?0:Integer.parseInt(release.group(2));
+        Properties index=new Properties();
+        try(InputStream source=Agent.class.getResourceAsStream("/fabric-mapping-index.properties")) {index.load(source);}
+        for(String candidate:index.getProperty(family,"").split(",")) {
+            if(candidate.isEmpty())continue;
+            int distance=Math.abs(patch-Integer.parseInt(candidate));
+            if(distance<nearest){nearest=distance;selected=family+"."+candidate;}
+        }
+        return selected;
+    }
 
     public static void premain(String options,Instrumentation instrumentation) throws Exception {
         if ("selftest".equals(options)) {
@@ -47,21 +65,24 @@ public final class Agent {
         URI endpoint=URI.create(config.getProperty("endpoint"));
         if (!"http".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost()) || endpoint.getUserInfo()!=null)
             throw new IllegalArgumentException("Control must use loopback");
-        try(InputStream mappings=Agent.class.getResourceAsStream("/forge-1.20.1.properties")) {names.load(mappings);}
         String adapter=config.getProperty("adapter","");
+        String version=adapter.substring(0,Math.max(0,adapter.lastIndexOf('-')));
+        boolean named=version.matches("(?:2[6-9]|[3-9][0-9])\\..*");
+        if(!named) {
+            try(InputStream mappings=Agent.class.getResourceAsStream("/forge-1.20.1.properties")) {names.load(mappings);}
+            try(InputStream exact=Agent.class.getResourceAsStream("/forge-"+version+".properties")) {
+                if(exact!=null)names.load(exact);
+            }
+        }
         if(adapter.endsWith("-fabric") || adapter.endsWith("-quilt")) {
             Properties aliases=new Properties();
-            String version=adapter.substring(0,adapter.lastIndexOf('-'));
-            InputStream resource=Agent.class.getResourceAsStream("/fabric-"+version+".properties");
-            if(resource==null) {
-                String baseline=version.startsWith("1.20.1") || version.startsWith("1.19") || version.startsWith("1.18") || version.startsWith("1.17") || version.startsWith("1.16")?"1.20.1":"1.21.1";
+            InputStream resource=named?null:Agent.class.getResourceAsStream("/fabric-"+version+".properties");
+            if(!named && resource==null) {
+                String baseline=fabricBaseline(version);
                 resource=Agent.class.getResourceAsStream("/fabric-"+baseline+".properties");
                 System.out.println("AETHERLOOM_AGENT_MAPPING_BASELINE requested="+version+" baseline="+baseline+" runtime capabilities required");
             }
-            try(InputStream source=resource) {
-                if(source==null)throw new IllegalArgumentException("Missing bundled mapping baselines");
-                aliases.load(source);
-            }
+            if(resource!=null)try(InputStream source=resource) {aliases.load(source);}
             instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(new File(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI())));
             hooks=Class.forName("online.superyk7hero.aetherloom.agent.BootstrapHooks",true,null);
             hooks.getField("lifecycle").set(null,(BiConsumer<Object,String>)Agent::serverLifecycle);
@@ -286,10 +307,26 @@ public final class Agent {
         Object server=call(mc,"getSingleplayerServer");if(server!=null)call(server,"halt",false);
         Object title=make("net.minecraft.client.gui.screens.TitleScreen");
         try {call(mc,modern()?"disconnect":"clearLevel",title);}
-        catch(NoSuchMethodException alternate){call(mc,modern()?"clearLevel":"disconnect",title);}
+        catch(NoSuchMethodException alternate){
+            try {call(mc,modern()?"clearLevel":"disconnect",title);}
+            catch(NoSuchMethodException newer){call(mc,"disconnect",title,false);}
+        }
     }
     static void tick() throws Exception {
         Object mc=minecraft(),player=field(mc,"player"),level=field(mc,"level"),server=call(mc,"getSingleplayerServer");
+        if(!stop && !worldOpenRequested && server==null && Boolean.parseBoolean(config.getProperty("open_world"))) {
+            Object screen=field(mc,"screen");
+            if(type("net.minecraft.client.gui.screens.TitleScreen").isInstance(screen)) {
+                worldOpenRequested=true;
+                String folder=Paths.get(config.getProperty("world")).getFileName().toString();
+                Object flows;
+                try {flows=call(mc,"createWorldOpenFlows");}
+                catch(NoSuchMethodException older){call(mc,"loadLevel",folder);return;}
+                try {call(flows,"loadLevel",screen,folder);}
+                catch(NoSuchMethodException newer){call(flows,"openWorld",folder,(Runnable)()->{});}
+                return;
+            }
+        }
         if(!config.containsKey("join") && !loaded && !stopping && player==null && server==null)confirmSelectedBackup(mc);
         // QuickPlay may have started the integrated server before registration.
         // Recover only the explicitly selected world, never an arbitrary world.
@@ -358,7 +395,13 @@ public final class Agent {
             target=make("net.minecraft.client.multiplayer.ServerData","Aetherloom",config.getProperty("join"),serverType);
             pinger=make("net.minecraft.client.multiplayer.ServerStatusPinger");
             try {call(pinger,"pingServer",target,(Runnable)()->{},(Runnable)()->{});}
-            catch(NoSuchMethodException older){call(pinger,"pingServer",target,(Runnable)()->{});}
+            catch(NoSuchMethodException alternate){
+                try {call(pinger,"pingServer",target,(Runnable)()->{});}
+                catch(NoSuchMethodException newer){
+                    Object nio=field(type("net.minecraft.server.network.EventLoopGroupHolder"),"NIO");
+                    call(pinger,"pingServer",target,(Runnable)()->{},(Runnable)()->{},nio);
+                }
+            }
             joinDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(60);
         }
         if(pinger!=null) {
@@ -368,7 +411,11 @@ public final class Agent {
                 Object address=call(type("net.minecraft.client.multiplayer.resolver.ServerAddress"),"parseString",config.getProperty("join"));
                 Object title=make("net.minecraft.client.gui.screens.TitleScreen");
                 try {call(type("net.minecraft.client.gui.screens.ConnectScreen"),"startConnecting",title,mc,address,target,false,null);}
-                catch(NoSuchMethodException older){call(type("net.minecraft.client.gui.screens.ConnectScreen"),"startConnecting",title,mc,address,target,false);}
+                catch(NoSuchMethodException older){
+                    Class<?> connect=type("net.minecraft.client.gui.screens.ConnectScreen");
+                    try {call(connect,"startConnecting",title,mc,address,target,false);}
+                    catch(NoSuchMethodException legacy){call(connect,"startConnecting",title,mc,address,target);}
+                }
             } else if(System.nanoTime()>joinDeadline)throw new IllegalStateException((neoForge?"NeoForge":fabric?"Fabric/Quilt":"Forge")+" discovery timeout");
         }
     }

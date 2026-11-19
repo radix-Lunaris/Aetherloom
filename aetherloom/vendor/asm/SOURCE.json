@@ -1,10 +1,10 @@
 {
   "component": "ASM core",
-  "version": "9.7.1",
+  "version": "9.8",
   "license": "BSD-3-Clause",
-  "binary_url": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar",
-  "binary_sha256": "8cadd43ac5eb6d09de05faecca38b917a040bb9139c7edeb4cc81c740b713281",
-  "source_url": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1-sources.jar",
-  "source_sha256": "22e9507b0c494daaedb33b8148c30cd618c6dacc3992be8b50eaaafeb6a8ba8d",
+  "binary_url": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar",
+  "binary_sha256": "876eab6a83daecad5ca67eb9fcabb063c97b5aeb8cf1fca7a989ecde17522051",
+  "source_url": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.8/asm-9.8-sources.jar",
+  "source_sha256": "c6294794f956f21e2b252a9bf65a96ce0489fb4c0f978447d85c8a75e485b633",
   "integration": "Original ASM bytecode relocated to private agent.internal.asm namespace, no game classes"
 }

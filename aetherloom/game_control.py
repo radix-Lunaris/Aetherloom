@@ -1,12 +1,14 @@
-"""Explicit selection of experimental game control; stable Bridge is default."""
+"""Choose managed game control from the installed instance."""
 import json
 from pathlib import Path
 import uuid
 
 CAPABILITIES=('world','lan','join','identity','saved','exit')
 
-def agent_config(control):
+def agent_config(control, *, open_world=False):
     data=json.loads(control.config.read_text(encoding='utf-8'))
+    if open_world:
+        data['open_world'] = True
     data.setdefault('adapter','1.20.1-forge');data['identity']=str(uuid.UUID(data['identity']))
     # Properties.load uses ISO-8859-1 with Java unicode escapes.
     def escape(value):
@@ -17,6 +19,17 @@ def agent_config(control):
     return path
 
 def select_backend(binding):
-    value=binding.get('control_backend','bridge')
-    if value not in ('bridge','agent'):raise ValueError('未知游戏控制实现')
-    return value
+    value = binding.get('control_backend', 'auto')
+    if value not in ('auto', 'bridge', 'agent'):
+        raise ValueError('未知游戏控制实现')
+    if 'root' not in binding or 'version' not in binding:
+        return 'bridge' if value == 'auto' else value
+    from .environment import describe, loader_family
+    environment = describe(binding['root'], binding['version'])
+    if value != 'agent' and (
+        environment['minecraft'], environment['loader'], loader_family(environment)
+    ) == ('1.20.1', 'forge', '47'):
+        return 'bridge'
+    if environment['loader'] not in ('forge', 'neoforge', 'fabric', 'quilt'):
+        raise ValueError('该实例可以离线启动，共享联机需要 Forge、NeoForge、Fabric 或 Quilt')
+    return 'agent'

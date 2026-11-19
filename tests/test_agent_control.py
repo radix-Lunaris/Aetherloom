@@ -40,3 +40,17 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(select_backend({}),'bridge')
         self.assertEqual(select_backend({'control_backend':'agent'}),'agent')
         with self.assertRaises(ValueError):select_backend({'control_backend':'guess'})
+
+    def test_existing_default_binding_automatically_selects_installed_loader(self):
+        from unittest.mock import patch
+        binding = {'root':'installed', 'version':'renamed pack', 'control_backend':'bridge'}
+        for loader, version, release, expected in (
+            ('forge','47.4.22','1.20.1','bridge'),
+            ('forge','43.4.12','1.19.2','agent'),
+            ('neoforge','21.1.264','1.21.1','agent'),
+            ('fabric','0.20.1','1.21.11','agent'),
+            ('quilt','0.30.2','1.21.1','agent'),
+        ):
+            with self.subTest(loader=loader, release=release), patch('aetherloom.environment.describe',
+                return_value={'minecraft':release,'loader':loader,'loader_version':version}):
+                self.assertEqual(select_backend(binding),expected)

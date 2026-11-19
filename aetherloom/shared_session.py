@@ -35,7 +35,7 @@ class SharedSession:
     def __init__(self,url,token,cache,room,binding,notify,confirm_recovery=False,game_accounts=None):
         self.api=API(url,token);self.cloud=CloudWorld(self.api,cache,progress=lambda text:notify('status',text),on_progress=lambda state:notify('progress',state))
         self.room,self.binding,self.notify=room,binding,notify
-        self.backend=select_backend(binding)
+        self.backend=None
         self.game_accounts=game_accounts;self.game_auth=None
         self.confirm_recovery=confirm_recovery;self.process=None;self.stop=False
         self.path_states={};self.data_states={}
@@ -69,7 +69,13 @@ class SharedSession:
         b=self.binding
         if self.backend=='agent':
             kwargs.pop('bridge_file',None)
-            kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge))
+            open_world = False
+            if kwargs.get('quick_play'):
+                from .launcher import manifest, supports_quick_play
+                if not supports_quick_play(manifest(Path(b['root']), b['version'])):
+                    kwargs.pop('quick_play')
+                    open_world = True
+            kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge, open_world=open_world))
         if self.game_auth:kwargs.update(game_auth=self.game_auth,authlib_jar=assets()/'authlib-injector.jar')
         process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),custom_uuid=b.get('uuid'),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
         self.process=process;self.notify('process',process)
@@ -127,6 +133,7 @@ class SharedSession:
         base='/api/rooms/'+self.room
         try:
             self.state('preflight',message='正在检查本地环境、账号权限和云端权威版本')
+            self.backend=await asyncio.to_thread(select_backend,self.binding)
             self.notify('status','游戏控制：'+('Agent' if self.backend=='agent' else 'Bridge'))
             await self.prepare_java()
             await self.prepare_account()
@@ -279,6 +286,7 @@ class SharedSession:
 class OfflineInspection(SharedSession):
     """Keep the interrupted original; inspect a copy without publishing LAN."""
     async def run(self):
+        self.backend=await asyncio.to_thread(select_backend,self.binding)
         self.state('inspection',role='离线恢复检查',message='不占Host、不建立LAN或隧道')
         await self.prepare_java()
         await self.prepare_account()

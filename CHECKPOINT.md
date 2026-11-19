@@ -272,3 +272,10 @@ materialize尚未处理云端删除文件、精确镜像、空目录与完整恢
 - CI 发现英文 Windows 控制台无法输出 STUN 中文日志，补强 best-effort 日志并增加回归；6 项并发/STUN 测试通过。Agent Java 8/11/17/21/25 双平台启动检查、Linux 测试及 Docker CI 通过。
 - Forge 官方 Maven 的 Gradle 插件解析再次失败；不跳过 Bridge 构建检查，不将未通过 CI 的预发行草稿标为已发布。本地缓存离线完整构建已通过。
 - 将控制台日志修正纳入最终构建，完成来源一致的 ECS 补充更新；私有部署与构建回执保存在 .local。
+
+## 2026-11-19 / 0.4.0a8
+
+- 已按已安装实例自动选择联机控制，兼容既有绑定。Forge 47／1.20.1 优先 Bridge，其他 Forge、NeoForge、Fabric、Quilt 走 Agent。
+- 新增无 Quick Play 的世界打开路径和较旧的连接接口，补 Forge 1.19.2 精确 SRG 别名。Fabric／Quilt 包含 16 组映射和同一系列补丁回退，新版可读类名路径及 ASM 9.8。
+- 本机 Forge 1.19.2／43.4.12／Java 17 单机 Host 通过。双玩家脚本已验证自动加入、自定义 UUID 和 Player 退出不上传，完整接续结果记于私有测试回执。
+- 69 项 Python 回归通过。扩展映射及运行时路径尚未覆盖每个版本实机组合，26.x 和全部整合包不计为已认证。交付仍为实验版单 EXE，复用现有 ECS 接口。

@@ -47,7 +47,7 @@ def allowed(rules):
     result = not rules
     for r in rules:
         spec = r.get("os", {})
-        if spec.get("name", system) != system:
+        if spec.get("name", system) not in (system, "universal"):
             continue
         if "arch" in spec and not re.search(spec["arch"], platform.machine()):
             continue
@@ -75,12 +75,25 @@ def manifest(root, version, seen=None):
     return merged
 
 def coordinate(name):
-    parts = name.split(":")
+    value, _, extension = name.partition("@")
+    extension = extension or "jar"
+    parts = value.split(":")
     if len(parts) not in (3, 4):
         raise LaunchError("Unsupported Maven coordinate")
     group, artifact, version = parts[:3]
     suffix = "-" + parts[3] if len(parts) == 4 else ""
-    return f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}{suffix}.jar"
+    return f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}{suffix}.{extension}"
+
+def library_key(lib):
+    value, _, extension = lib["name"].partition("@")
+    group, artifact, _, *classifier = value.split(":")
+    return group, artifact, tuple(classifier), extension or "jar", tuple(sorted(lib.get("natives", {}).items()))
+
+def supports_quick_play(metadata):
+    return any(isinstance(arg, dict) and any(
+        rule.get('features', {}).get('is_quick_play_singleplayer')
+        for rule in arg.get('rules', [])
+    ) for arg in metadata.get('arguments', {}).get('game', []))
 
 def game_uuid(name, custom_uuid=None):
     if custom_uuid is None:return offline_uuid(name)
@@ -111,6 +124,9 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
     if not 512 <= memory <= 65536:
         raise LaunchError("Invalid memory limit")
     m = manifest(root, version)
+    main_class = m["mainClass"]
+    if main_class.startswith(("org.jackhuang.hmcl.", "com.helloingmc.pcl.")):
+        raise LaunchError("该实例使用外部启动器的专用引导，请使用由相同加载器生成的标准版本配置")
     missing, cp, natives = [], [], []
     def require(p):
         if not p.is_file():
@@ -121,11 +137,9 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
     libs = {}
     for lib in m.get("libraries", []):
         # Preserve classifier dependencies, replace inherited module versions.
-        key = lib["name"].split(":")
-        libs[(key[0], key[1], tuple(key[3:]))] = lib
+        if allowed(lib.get("rules", [])):
+            libs[library_key(lib)] = lib
     for lib in libs.values():
-        if not allowed(lib.get("rules", [])):
-            continue
         dl = lib.get("downloads", {})
         item = dl.get("artifact")
         if item or not lib.get("natives"):
@@ -142,28 +156,49 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
     cp.append(str(primary_jar))
     asset_id = m.get("assetIndex", {}).get("id", m.get("assets", "legacy"))
     index = require(inside(root, f"assets/indexes/{asset_id}.json"))
+    legacy_assets = []
+    virtual = False
     if index.is_file():
-        for obj in json.loads(index.read_text(encoding="utf-8")).get("objects", {}).values():
+        asset_index = json.loads(index.read_text(encoding="utf-8"))
+        virtual = asset_index.get("virtual", False)
+        for asset_name, obj in asset_index.get("objects", {}).items():
             h = obj["hash"]
             if not re.fullmatch("[0-9a-f]{40}", h):
                 raise LaunchError("Invalid asset hash")
-            require(root / "assets" / "objects" / h[:2] / h)
+            source = require(inside(root, f"assets/objects/{h[:2]}/{h}"))
+            if virtual:
+                legacy_assets.append((source, inside(root / "assets" / "virtual" / asset_id, asset_name)))
+            if asset_index.get("map_to_resources"):
+                legacy_assets.append((source, inside(run / "resources", asset_name)))
     if missing:
         raise LaunchError("Missing files:\n" + "\n".join(missing))
     from .runtime import inspect_java,launch_compatibility
     java_info=inspect_java(java,refresh=True)
     reason=launch_compatibility(java_info)
     if reason:raise LaunchError(reason)
+    if legacy_assets:
+        import shutil
+        for source, target in legacy_assets:
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+                try:
+                    shutil.copyfile(source, temp)
+                    if not target.exists():
+                        os.replace(temp, target)
+                finally:
+                    temp.unlink(missing_ok=True)
     native_dir = inside(run, ".aetherloom/natives/" + uuid.uuid4().hex)
     native_dir.mkdir(parents=True,exist_ok=True)
     cp = [java_path(p) for p in cp]
     primary_java = java_path(primary_jar)
     libraries_java = java_path(root / 'libraries')
     variables = dict(auth_player_name=name, auth_uuid=identity, auth_access_token="0",
-        clientid="", auth_xuid="", auth_session="0", xuid="",
+        clientid="", client_id="", auth_client_id="", auth_xuid="", auth_session="0", xuid="",
         resolution_width="1280", resolution_height="720",
         user_type="legacy", user_properties="{}", version_name=version, version_type=m.get("type", "release"),
         game_directory=java_path(run), assets_root=java_path(root / "assets"), assets_index_name=asset_id,
+        game_assets=java_path(root / "assets" / "virtual" / asset_id if virtual else root / "assets"),
         natives_directory=java_path(native_dir), launcher_name="Aetherloom", launcher_version=__version__,
         classpath=os.pathsep.join(cp), classpath_separator=os.pathsep,
         library_directory=libraries_java, libraries_directory=libraries_java,
@@ -202,7 +237,7 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
                 target = inside(native_dir, entry.filename)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(z.read(entry))
-    return [str(java), f"-Xmx{memory}M", *jvm, m["mainClass"], *game], run
+    return [str(java), f"-Xmx{memory}M", *jvm, main_class, *game], run
 
 def launch(*args, quick_play=None, bridge_file=None, agent_jar=None, agent_config=None, before_start=None, managed=False, game_auth=None,authlib_jar=None, **kwargs):
     command, run = prepare(*args, game_auth=game_auth,**kwargs)

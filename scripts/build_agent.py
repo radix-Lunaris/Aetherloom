@@ -2,8 +2,8 @@
 from pathlib import Path
 import os,shutil,subprocess,zipfile,hashlib,urllib.request,struct
 
-ASM_SHA256='8cadd43ac5eb6d09de05faecca38b917a040bb9139c7edeb4cc81c740b713281'
-ASM_URL='https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar'
+ASM_SHA256='876eab6a83daecad5ca67eb9fcabb063c97b5aeb8cf1fca7a989ecde17522051'
+ASM_URL='https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar'
 OLD=b'org/objectweb/asm';NEW=b'online/superyk7hero/aetherloom/agent/internal/asm'
 
 def relocate(data):
@@ -26,7 +26,7 @@ def build(root=None):
     root=Path(root or Path(__file__).resolve().parent.parent)
     javac=Path(os.environ['JAVA_HOME'])/'bin'/('javac.exe' if os.name=='nt' else 'javac') if os.environ.get('JAVA_HOME') else shutil.which('javac')
     if not javac:raise RuntimeError('Existing build JDK required; no automatic Java installation')
-    asm=root/'.local/build-deps/asm-9.7.1.jar';asm.parent.mkdir(parents=True,exist_ok=True)
+    asm=root/'.local/build-deps/asm-9.8.jar';asm.parent.mkdir(parents=True,exist_ok=True)
     if not asm.exists():
         with urllib.request.urlopen(ASM_URL,timeout=60) as response:data=response.read(1024*1024)
         if hashlib.sha256(data).hexdigest()!=ASM_SHA256:raise ValueError('ASM dependency hash mismatch')
