@@ -693,11 +693,19 @@ class Window(ctk.CTk):
         if not (world/'level.dat').is_file() or world.parent!=Path(binding['run']).resolve()/'saves':
             self.note('请选择当前运行目录 saves 下包含 level.dat 的世界目录',True);return
         binding['world']=str(world)
-        from .worlds import level_info
+        from .worlds import level_info,publication_needs_version_confirmation
+        from .vanilla_control import name_data_identity
         try:
             metadata=level_info(world/'level.dat');expected=describe(binding['root'],binding['version'])['minecraft']
-            if metadata['game_version']!=expected:raise ValueError('存档版本 '+metadata['game_version']+' 与游戏 '+expected+' 不同，请先在个人模式核对并保存为目标版本')
+            confirm_version=publication_needs_version_confirmation(metadata,expected)
+            name_data=name_data_identity(binding,expected)
         except (OSError,ValueError,KeyError) as error:self.note('存档检查失败：'+str(error),True);return
+        confirmations=[]
+        if confirm_version:
+            confirmations.append(f'这份旧存档没有发行版本记录。请确认它最后用 {expected} 保存。')
+        if name_data:
+            confirmations.append(f'如果世界含单人角色数据，请确认归属于离线玩家 {name_data}。')
+        if confirmations and not messagebox.askyesno('确认旧版存档','\n'.join(confirmations),parent=self):return
         name=existing.get('name') if existing else ctk.CTkInputDialog(text='共享房间名称',title='发布共同世界').get_input()
         if not name:return
         from .cloud import API,CloudWorld,LeaseGuard
@@ -720,8 +728,7 @@ class Window(ctk.CTk):
             guard=LeaseGuard(api,room,lease)
             try:
                 from .shared_session import repair
-                from .launcher import offline_uuid
-                repair(world,binding['java'],game_uuid(binding['name'],binding.get('uuid')))
+                repair(world,binding['java'],game_uuid(binding['name'],binding.get('uuid')),name_data=name_data,publishing=True)
                 version=CloudWorld(api,self.settings.path.parent/'cache',on_progress=progress).upload(room,world,guard.lease,None)
                 return room,version
             except Exception:
@@ -751,7 +758,10 @@ class Window(ctk.CTk):
         if not b:return
         try:
             from .game_control import select_backend
-            validate(describe(b['root'],b['version']),room.get('environment'),backend=select_backend(b))
+            from .vanilla_control import name_data_identity
+            environment=describe(b['root'],b['version'])
+            validate(environment,room.get('environment'),backend=select_backend(b))
+            name_data_identity(b,environment['minecraft'])
             validate_account(b,room.get('environment'))
         except (ValueError,OSError,KeyError) as e:self.note(str(e),True);return
         if not messagebox.askyesno('绑定共享房间',f"将当前本地版本 {b['version']} 绑定到房间 {room.get('name') or room['id']}？\n请确保版本、加载器和Mods与房间环境一致。\n作为Host时会将云端存档校验下载到专用世界目录。",parent=self):return

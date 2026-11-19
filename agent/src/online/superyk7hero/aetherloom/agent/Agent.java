@@ -28,6 +28,10 @@ public final class Agent {
     static volatile boolean directHooks;
     static boolean earlyProfile;
     static boolean legacy;
+    static boolean legacyTickHook;
+    static volatile boolean legacyTickReady;
+    static volatile boolean legacyOwnerSeen;
+    static long nextLegacyTick;
     static volatile Object selectedLegacyServer;
     static boolean configurationApi,postTickApi;
     static Object hostProfile,haltedServer;
@@ -86,11 +90,9 @@ public final class Agent {
         if(knot || vanilla) {
             Properties aliases=new Properties();
             String prefix=vanilla?"/vanilla-":"/fabric-";
-            InputStream resource=named?null:Agent.class.getResourceAsStream(prefix+version+".properties");
-            if(!named && resource==null) {
-                resource=Agent.class.getResourceAsStream((vanilla?"/legacy-vanilla-":"/legacy-fabric-")+version+".properties");
-                legacy=resource!=null;
-            }
+            InputStream resource=named?null:Agent.class.getResourceAsStream((vanilla?"/legacy-vanilla-":"/legacy-fabric-")+version+".properties");
+            legacy=resource!=null;
+            if(!named && resource==null)resource=Agent.class.getResourceAsStream(prefix+version+".properties");
             if(knot && !named && resource==null) {
                 String baseline=fabricBaseline(version);
                 resource=Agent.class.getResourceAsStream("/fabric-"+baseline+".properties");
@@ -103,7 +105,9 @@ public final class Agent {
             hooks.getField("lifecycle").set(null,(BiConsumer<Object,String>)Agent::serverLifecycle);
             hooks.getField("identity").set(null,(UnaryOperator<Object>)Agent::profileIdentity);
             earlyProfile=named;
-            instrumentation.addTransformer(new LoaderTransformer(aliases,earlyProfile,legacy));
+            legacyTickHook=legacy && aliases.containsKey(aliases.getProperty("class.net.minecraft.client.Minecraft")+".legacyClientTick");
+            if(legacyTickHook)hooks.getField("clientTick").set(null,(Runnable)Agent::legacyTick);
+            instrumentation.addTransformer(new LoaderTransformer(aliases,earlyProfile,legacy,config.containsKey("legacy_name")));
             names.clear();names.putAll(aliases);directHooks=true;
         }
         Thread worker=new Thread(()->{
@@ -128,10 +132,13 @@ public final class Agent {
                     try {type("net.minecraftforge.event.network.GatherLoginConfigurationTasksEvent");configurationApi=!neoForge;}catch(ClassNotFoundException missing){configurationApi=false;}
                     try {type("net.minecraftforge.event.TickEvent$ClientTickEvent$Post");postTickApi=true;}catch(ClassNotFoundException missing){postTickApi=false;}
                 }
+                if(legacyTickHook && !hooks.getField("clientTickInstalled").getBoolean(null))
+                    throw new IllegalStateException("Legacy client tick hook was not installed");
                 if(directHooks)emit("capabilities",0);else install();
+                legacyTickReady=legacyTickHook;
                 while(!exitRequested && (directHooks || !finished)) {
                     if(!finished)stop=request("",null).contains("\"stop\": true");
-                    if(directHooks && tickPending.compareAndSet(false,true)) {
+                    if(directHooks && !legacyTickHook && tickPending.compareAndSet(false,true)) {
                         Runnable update=()->{try{tick();}catch(Throwable error){fail(error);}finally{tickPending.set(false);}};
                         Object client=minecraft();
                         if(legacy)call(client,"submitLegacyTick",(Callable<Void>)()->{update.run();return null;});
@@ -141,6 +148,12 @@ public final class Agent {
                 }
             } catch(Throwable error) {fail(error);}
         },"Aetherloom agent bootstrap");worker.setDaemon(true);worker.start();
+    }
+    static void legacyTick() {
+        if(!legacyTickReady || exitRequested || System.nanoTime()<nextLegacyTick)return;
+        nextLegacyTick=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(100);
+        try {tick();}
+        catch(Throwable error){legacyTickReady=false;fail(error);}
     }
 
     static Class<?> type(String name) throws Exception {
@@ -257,6 +270,18 @@ public final class Agent {
     static Object profileIdentity(Object profile) {
         if(config.containsKey("join") || Boolean.parseBoolean(config.getProperty("inspect")))return profile;
         try {
+            String legacyName=config.getProperty("legacy_name");
+            if(legacyName!=null) {
+                String player=profile instanceof String?(String)profile:profileName(profile);
+                if(!player.matches("[a-z0-9_]{1,16}"))throw new IllegalStateException("Invalid legacy player name");
+                if(!loaded && legacyName.equals(player)) {
+                    legacyOwnerSeen=true;
+                    return profile;
+                }
+                UUID expected=UUID.nameUUIDFromBytes(("OfflinePlayer:"+player).getBytes(StandardCharsets.UTF_8));
+                if(!expected.equals(registeredUuidByName(player)))throw new IllegalStateException("Unregistered legacy player");
+                return profile;
+            }
             if(profile==hostProfile)return profile;
             if(!loaded && UUID.fromString(config.getProperty("identity")).equals(profileId(profile))) {hostProfile=profile;return profile;}
             return resolveProfile(profile,registeredUuid(profile));
@@ -282,12 +307,18 @@ public final class Agent {
     static UUID registeredUuid(Object profile) throws Exception {
         boolean external="littleskin".equals(config.getProperty("auth_mode"));
         String lookup=external?"by-uuid/"+profileId(profile):URLEncoder.encode(profileName(profile),"UTF-8");
+        UUID id=registeredUuidAt(lookup);
+        if(external && !id.equals(profileId(profile)))throw new IllegalStateException("Verified LittleSkin UUID mismatch");
+        return id;
+    }
+    static UUID registeredUuidByName(String name) throws Exception {
+        return registeredUuidAt(URLEncoder.encode(name,"UTF-8"));
+    }
+    static UUID registeredUuidAt(String lookup) throws Exception {
         String response=request("/identity/"+lookup,null);
         java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\\"uuid\\\"\\s*:\\s*\\\"([0-9a-fA-F-]{36})\\\"").matcher(response);
         if(!match.find())throw new IllegalStateException("Unregistered peer identity");
-        UUID id=UUID.fromString(match.group(1));
-        if(external && !id.equals(profileId(profile)))throw new IllegalStateException("Verified LittleSkin UUID mismatch");
-        return id;
+        return UUID.fromString(match.group(1));
     }
     static Object resolveProfile(Object profile,UUID id) throws Exception {
         if(id.equals(profileId(profile)))return profile;
@@ -340,7 +371,9 @@ public final class Agent {
     static boolean selected(Object server) throws Exception {
         if(legacy) {
             if(server==selectedLegacyServer)return true;
-            File directory=(File)field(minecraft(),"legacyRunDirectory");
+            File directory;
+            try {directory=(File)field(minecraft(),"legacyRunDirectory");}
+            catch(NoSuchFieldException older){directory=(File)call(server,"legacyServerDirectory");}
             String folder=(String)call(server,"legacyLevelName");
             if(folder==null || folder.isEmpty())return false;
             Path saves=directory.toPath().resolve("saves").toRealPath();
@@ -355,8 +388,9 @@ public final class Agent {
     static void leave(Object mc) throws Exception {
         if(legacy) {
             Object server=call(mc,"getSingleplayerServer");
-            if(server!=null)call(server,"halt");
-            call(mc,"legacyDetach",new Object[]{null});
+            if(server!=null)try {call(server,"halt");}catch(NoSuchMethodException newer){call(server,"halt",false);}
+            try {call(mc,"legacyDetach",new Object[]{null});}
+            catch(NoSuchMethodException newer){call(mc,"legacyDetach");}
             return;
         }
         Object level=field(mc,"level");
@@ -398,9 +432,13 @@ public final class Agent {
         if(!config.containsKey("join") && !loaded && pending==null && !stopping && server!=null && player!=null && level!=null && selected(server))pending=server;
         if(loaded && System.nanoTime()>=nextStats) {
             nextStats=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);
-            Object connection=server==null?call(mc,"getConnection"):null;
-            int count=server!=null?((Number)call(server,"getPlayerCount")).intValue():connection!=null?((Collection<?>)call(connection,"getOnlinePlayers")).size():0;
-            emitStats(count);
+            Object connection=server==null && !config.containsKey("legacy_name")?call(mc,"getConnection"):null;
+            try {
+                int count=server!=null?((Number)call(server,"getPlayerCount")).intValue():connection!=null?((Collection<?>)call(connection,"getOnlinePlayers")).size():0;
+                emitStats(count);
+            } catch(NoSuchMethodException missingStatistic) {
+                if(!legacy)throw missingStatistic;
+            }
         }
         if(config.containsKey("join")) {
             Object screen=screen(mc);
@@ -535,6 +573,13 @@ public final class Agent {
         return out.append('"').toString();
     }
     static void checkIdentity(Object player) throws Exception {
+        if(config.containsKey("legacy_name")) {
+            // On these versions the server-side construction guard validates
+            // the username before player files are read.
+            if(!config.containsKey("join") && !Boolean.parseBoolean(config.getProperty("inspect")) && !legacyOwnerSeen)
+                throw new IllegalStateException("Legacy server did not verify the local Host name");
+            return;
+        }
         UUID expected=UUID.fromString(config.getProperty("identity"));
         Object actual=call(player,"getUUID");
         if((modern() || directHooks) && config.containsKey("join") && !"littleskin".equals(config.getProperty("auth_mode")) && !expected.equals(actual)) {
@@ -545,11 +590,15 @@ public final class Agent {
             UUID vanilla=UUID.nameUUIDFromBytes(("OfflinePlayer:"+profileName(profile)).getBytes(StandardCharsets.UTF_8));
             if(!vanilla.equals(call(player,"getUUID")))throw new IllegalStateException("Unexpected offline login identity");
             Object connection=call(minecraft(),"getConnection");
-            Object localProfile=call(connection,"getLocalGameProfile");
             Object corrected=resolveProfile(profile,expected);
-            Object correctedLocal=resolveProfile(localProfile,expected);
             if(corrected!=profile)replaceProfileField(player,"gameProfile",profile,corrected);
-            if(correctedLocal!=localProfile)replaceProfileField(connection,"localGameProfile",localProfile,correctedLocal);
+            try {
+                Object localProfile=call(connection,"getLocalGameProfile");
+                Object correctedLocal=resolveProfile(localProfile,expected);
+                if(correctedLocal!=localProfile)replaceProfileField(connection,"localGameProfile",localProfile,correctedLocal);
+            } catch(NoSuchMethodException older) {
+                if(!legacy)throw older;
+            }
             if(legacy) {
                 try {call(player,"setUUID",expected);}
                 catch(NoSuchMethodException older){replaceProfileField(player,"legacyUuid",actual,expected);}

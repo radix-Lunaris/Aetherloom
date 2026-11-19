@@ -1,6 +1,7 @@
 package org.sharedplayerdata.core;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.Arrays;
 import java.util.UUID;
@@ -100,11 +101,71 @@ public class AetherloomRepair {
             Files.deleteIfExists(temp);
         }
     }
+
+    static void repairNamed(Path world, UUID identity, String name, String operation) throws Exception {
+        if (!name.matches("[a-z0-9_]{1,16}") ||
+            !identity.equals(UUID.nameUUIDFromBytes(("OfflinePlayer:"+name).getBytes(StandardCharsets.UTF_8))))
+            throw new IOException("Invalid legacy player name binding");
+        world=world.toRealPath();
+        Path level=world.resolve("level.dat");
+        Path players=world.resolve("players");
+        Path target=players.resolve(name+".dat");
+        Path backups=world.resolve("aetherloom-playerdata-backups");
+        for (Path path : new Path[]{level,players,target,backups})
+            if (Files.isSymbolicLink(path)) throw new IOException("World symlinks are unsupported");
+        if (Files.isDirectory(players)) {
+            try (DirectoryStream<Path> files=Files.newDirectoryStream(players)) {
+                for (Path path : files) {
+                    String candidate=path.getFileName().toString();
+                    if (candidate.equalsIgnoreCase(name+".dat") && !candidate.equals(name+".dat"))
+                        throw new IOException("Player file has incompatible letter case; manual review required");
+                }
+            }
+        }
+        Tag root=NbtIo.readCompressed(level), data=root.getCompound("Data");
+        if (data==null || data.contains("singleplayer_uuid")) throw new IOException("Unexpected legacy player layout");
+        Tag external=Files.exists(target)?NbtIo.readCompressed(target):null;
+        if (!data.contains("Player")) return;
+        Tag player=data.getCompound("Player");
+        if (player==null) throw new IOException("Invalid legacy Player compound");
+        if (operation.equals("prepare-name")) throw new IOException("Legacy world still contains an unassigned singleplayer record");
+        // This format keys player storage by name. An entity UUID in old NBT
+        // can be random. The publisher or the verified Host supplies ownership.
+        Path backup=backups.resolve(UUID.randomUUID().toString());
+        Files.createDirectories(backup);
+        Files.copy(level,backup.resolve("level.dat"));
+        Path candidate=backup.resolve("embedded.dat");
+        NbtIo.writeCompressed(player,candidate);
+        if (external!=null) {
+            Files.copy(target,backup.resolve("original-player.dat"));
+            if (operation.equals("publish-name")) {
+                Path normalized=backup.resolve("normalized.dat");
+                NbtIo.writeCompressed(external,normalized);
+                if (!Arrays.equals(Files.readAllBytes(candidate),Files.readAllBytes(normalized)))
+                    throw new IOException("Legacy player file conflicts with embedded data; both preserved");
+            }
+        }
+        Files.createDirectories(players);
+        Path playerTemp=players.resolve(name+"."+UUID.randomUUID()+".tmp");
+        Path levelTemp=world.resolve("level.dat."+UUID.randomUUID()+".tmp");
+        try {
+            Files.copy(candidate,playerTemp);
+            replace(playerTemp,target);
+            data.remove("Player");
+            NbtIo.writeCompressed(root,levelTemp);
+            replace(levelTemp,level);
+        } finally {
+            Files.deleteIfExists(playerTemp);
+            Files.deleteIfExists(levelTemp);
+        }
+    }
     public static void main(String[] args) {
         try {
-            if (args.length!=3) throw new IllegalArgumentException("prepare|saved world UUID");
-            if (!args[0].equals("prepare") && !args[0].equals("saved")) throw new IllegalArgumentException("Invalid mode");
-            repair(Paths.get(args[1]),UUID.fromString(args[2]),args[0].equals("saved"));
+            if (args.length==4 && (args[0].equals("prepare-name") || args[0].equals("saved-name") || args[0].equals("publish-name"))) {
+                repairNamed(Paths.get(args[1]),UUID.fromString(args[2]),args[3],args[0]);
+            } else if (args.length==3 && (args[0].equals("prepare") || args[0].equals("saved"))) {
+                repair(Paths.get(args[1]),UUID.fromString(args[2]),args[0].equals("saved"));
+            } else throw new IllegalArgumentException("Invalid repair operation");
             System.out.println("OK");
         } catch (Throwable e) {
             System.err.println(e.getMessage());

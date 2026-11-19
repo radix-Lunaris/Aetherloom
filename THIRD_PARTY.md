@@ -24,3 +24,5 @@ authlib-injector1.2.8: unmodified upstream build56, source commit5437f5b465ee3f5
 ## Agent 多加载器适配与 STUN
 
 ASM 9.8 来自官方 Maven Central，采用 BSD 3-Clause。许可证和哈希位于 `aetherloom/vendor/asm/`。构建时重定位至私有命名空间并内嵌 EXE。Fabric intermediary 的 CC0 声明、Mojang 映射声明和 Forge MCPConfig 来源随派生别名提供，见 `agent/resources/MAPPINGS-SOURCE.json` 与 `MAPPINGS-NOTICE.txt`。CraftLink 双端口 STUN responder 按 GPL 来源适配，版本及本地修改见 `aetherloom/vendor/craftlink/SOURCE.json`。
+
+历史控制别名另使用 Ornithe Calamus（CC0-1.0）。来源、输入哈希与派生别名哈希见 `agent/resources/HISTORICAL-MAPPINGS-SOURCE.json`。

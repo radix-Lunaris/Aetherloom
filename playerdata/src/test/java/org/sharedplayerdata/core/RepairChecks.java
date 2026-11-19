@@ -69,6 +69,19 @@ public class RepairChecks {
         level(legacy,legacyPlayer);
         AetherloomRepair.repair(legacy,B,false);
         assert NbtIo.readCompressed(legacy.resolve("playerdata/"+A+".dat")).getInt("XpLevel",0)==55;
+        Path named=base.resolve("named-player");
+        UUID namedId=UUID.nameUUIDFromBytes("OfflinePlayer:host".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        level(named,legacyPlayer);
+        fail(()->AetherloomRepair.repairNamed(named,namedId,"host","prepare-name"));
+        AetherloomRepair.repairNamed(named,namedId,"host","publish-name");
+        Path namedFile=named.resolve("players/host.dat");
+        assert NbtIo.readCompressed(namedFile).getInt("XpLevel",0)==55;
+        AetherloomRepair.repairNamed(named,namedId,"host","prepare-name");
+        level(named,player(A,81));
+        fail(()->AetherloomRepair.repairNamed(named,namedId,"host","publish-name"));
+        assert NbtIo.readCompressed(namedFile).getInt("XpLevel",0)==55;
+        AetherloomRepair.repairNamed(named,namedId,"host","saved-name");
+        assert NbtIo.readCompressed(namedFile).getInt("XpLevel",0)==81;
         System.out.println("Repair checks passed: single-world, stale external conflict, verified save, unknown/zero UUID, corrupt NBT, idempotence, backup failure");
     }
 }

@@ -55,9 +55,23 @@ def level_info(path):
     version=value.get('Version',{})
     if type(value.get('LastPlayed',0))!=int:raise ValueError('LastPlayed不是整数')
     return {'world_name':str(value.get('LevelName','')),'game_version':str(version.get('Name','')) if isinstance(version,dict) else str(version),
+            'storage_version':value.get('version'),
             'gametype':{0:'生存',1:'创造',2:'冒险',3:'旁观'}.get(value.get('GameType'),'未知'),
             'difficulty':{0:'和平',1:'简单',2:'普通',3:'困难'}.get(value.get('Difficulty'),'未知'),
             'hardcore':bool(value.get('hardcore',False)),'last_played':int(value.get('LastPlayed',0))/1000}
+
+def publication_needs_version_confirmation(metadata, expected):
+    """Old Anvil saves may omit the Minecraft release name."""
+    version=metadata['game_version']
+    if version==expected:
+        return False
+    if not version:
+        from .vanilla_control import supports_vanilla_control
+        parts=expected.split('.')
+        if (supports_vanilla_control(expected) and len(parts)>=2 and
+            parts[0]=='1' and int(parts[1])<=8 and metadata.get('storage_version')==19133):
+            return True
+    raise ValueError(f'存档版本 {version or "未知"} 与游戏 {expected} 不同，请先在个人模式核对并保存为目标版本')
 
 def discover(run):
     run=Path(run).resolve();saves=run/'saves';found=[]

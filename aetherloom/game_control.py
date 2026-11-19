@@ -25,7 +25,7 @@ def select_backend(binding):
     if 'root' not in binding or 'version' not in binding:
         return 'bridge' if value == 'auto' else value
     from .environment import describe, loader_family
-    from .vanilla_control import LEGACY_LAN_RELEASES, supports_vanilla_control
+    from .vanilla_control import CALAMUS_VANILLA_RELEASES, LEGACY_LAN_RELEASES, supports_vanilla_control
     environment = describe(binding['root'], binding['version'])
     if value != 'agent' and (
         environment['minecraft'], environment['loader'], loader_family(environment)
@@ -36,6 +36,8 @@ def select_backend(binding):
             raise ValueError('该原版尚无对应联机控制，仍可离线启动')
     elif environment['loader'] not in ('forge', 'neoforge', 'fabric', 'quilt'):
         raise ValueError('当前加载器没有联机控制实现')
+    elif environment['minecraft'] in CALAMUS_VANILLA_RELEASES:
+        raise ValueError('此补丁当前只有原版的精确联机控制，模组加载器仍可离线启动')
     elif environment['minecraft'] in LEGACY_LAN_RELEASES:
         if environment['loader'] != 'fabric':
             raise ValueError('此旧版联机需要原版或 Legacy Fabric 实例')

@@ -6,7 +6,7 @@ import zlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
-from aetherloom.worlds import discover,level_info,Reader
+from aetherloom.worlds import discover,level_info,publication_needs_version_confirmation,Reader
 from aetherloom.network_status import nat_values
 from aetherloom.vendor.craftlink.nat_types import NatSub,Filter
 from aetherloom.environment import validate
@@ -25,6 +25,18 @@ def metadata(name='共同世界',version='1.20.1',played=1000):
 
 
 class WorldDiscoveryTests(unittest.TestCase):
+    def test_legacy_anvil_version_is_explicitly_confirmed(self):
+        data={'game_version':'','storage_version':19133}
+        self.assertTrue(publication_needs_version_confirmation(data,'1.7.5'))
+        self.assertTrue(publication_needs_version_confirmation(data,'1.7.10'))
+        self.assertTrue(publication_needs_version_confirmation(data,'1.8.5'))
+        self.assertFalse(publication_needs_version_confirmation({'game_version':'1.20.1'},'1.20.1'))
+        for expected in ('1.2.5','1.9','1.19.2'):
+            with self.assertRaisesRegex(ValueError,'未知'):
+                publication_needs_version_confirmation(data,expected)
+        with self.assertRaises(ValueError):
+            publication_needs_version_confirmation({'game_version':'1.8.6','storage_version':19133},'1.8.5')
+
     def test_selected_saves_only_metadata_and_corruption(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);run=root/'所选实例';saves=run/'saves';saves.mkdir(parents=True)

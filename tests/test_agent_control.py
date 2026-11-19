@@ -59,7 +59,7 @@ class AgentControlTests(unittest.TestCase):
         from unittest.mock import patch
         binding = {'root':'installed', 'version':'vanilla', 'control_backend':'auto'}
         for version, supported in (
-            ('1.7.10',False), ('1.8.5',True), ('1.13.2',True), ('1.14.3',False), ('1.14.4',True),
+            ('1.2.5',False), ('1.7.5',True), ('1.7.10',True), ('1.8.5',True), ('1.13.2',True), ('1.14.3',True), ('1.14.4',True),
             ('1.19.2',True), ('1.21.11',True), ('26.3',True),
         ):
             with self.subTest(version=version), patch('aetherloom.environment.describe',
@@ -93,3 +93,32 @@ class AgentControlTests(unittest.TestCase):
             manifest.return_value={'libraries':[{'name':'net.legacyfabric:intermediary:1.8.6'}]}
             with self.assertRaisesRegex(ValueError,'Intermediary'):
                 select_backend(binding)
+
+    def test_historical_aliases_use_exact_raw_client_and_thread_hook(self):
+        import hashlib
+        from aetherloom.vanilla_control import CALAMUS_VANILLA_RELEASES, FABRIC_114_RELEASES
+        folder=Path(__file__).resolve().parents[1]/'agent/resources'
+        records=json.loads((folder/'HISTORICAL-MAPPINGS-SOURCE.json').read_text(encoding='utf-8'))['versions']
+        self.assertEqual({row['version'] for row in records},CALAMUS_VANILLA_RELEASES|FABRIC_114_RELEASES)
+        for row in records:
+            version=row['version']
+            self.assertEqual('fabric_sha256' in row, version in FABRIC_114_RELEASES)
+            for flavor in ('vanilla','fabric'):
+                if flavor+'_sha256' not in row:
+                    continue
+                with self.subTest(version=version, flavor=flavor):
+                    file=folder/f'legacy-{flavor}-{version}.properties'
+                    data=file.read_text(encoding='ascii')
+                    self.assertEqual(hashlib.sha256(data.encode('ascii')).hexdigest(),row[flavor+'_sha256'])
+                    properties=dict(line.split('=',1) for line in data.splitlines())
+                    client=properties['class.net.minecraft.client.Minecraft']
+                    self.assertIn(client+'.legacyClientTick',properties)
+
+    def test_legacy_name_identity_cannot_be_reassigned(self):
+        from aetherloom.vanilla_control import name_data_identity
+        self.assertEqual(name_data_identity({'name':'host','uuid':offline_uuid('host')},'1.7.5'),'host')
+        self.assertIsNone(name_data_identity({'name':'Host'},'1.7.6'))
+        for binding in ({'name':'Host'}, {'name':'host','uuid':offline_uuid('other')},
+                        {'name':'host','game_account':'test'}):
+            with self.assertRaises(ValueError):
+                name_data_identity(binding,'1.7.5')

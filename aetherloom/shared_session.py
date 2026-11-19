@@ -15,6 +15,7 @@ from .world_lock import closed_world
 from .runtime import hidden_process
 from .environment import describe,validate,validate_account
 from .game_control import select_backend,agent_config
+from .vanilla_control import CALAMUS_VANILLA_RELEASES,FABRIC_114_RELEASES,name_data_identity
 
 
 def assets():
@@ -22,11 +23,17 @@ def assets():
     return base/'assets'
 
 
-def repair(world,java,identity,saved=False):
+def repair(world,java,identity,saved=False,*,name_data=None,publishing=False):
     helper=assets()/'aetherloom-playerdata.jar'
     if not helper.is_file():raise ValueError('交付包缺少玩家数据辅助模块，禁止共享开服')
+    operation='saved' if saved else 'prepare'
+    if name_data:
+        operation='publish-name' if publishing else operation+'-name'
+    arguments=[java,'-Xmx128M','-jar',str(helper),operation,str(world),str(uuid.UUID(identity))]
+    if name_data:
+        arguments.append(name_data)
     with closed_world(world):
-        result=subprocess.run([java,'-Xmx128M','-jar',str(helper),'saved' if saved else 'prepare',str(world),str(uuid.UUID(identity))],
+        result=subprocess.run(arguments,
             capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=90,**hidden_process())
         if result.returncode:raise ValueError('玩家数据检查失败：'+(result.stderr or result.stdout).strip())
 
@@ -35,7 +42,7 @@ class SharedSession:
     def __init__(self,url,token,cache,room,binding,notify,confirm_recovery=False,game_accounts=None):
         self.api=API(url,token);self.cloud=CloudWorld(self.api,cache,progress=lambda text:notify('status',text),on_progress=lambda state:notify('progress',state))
         self.room,self.binding,self.notify=room,binding,notify
-        self.backend=None
+        self.backend=None;self.name_data=None
         self.game_accounts=game_accounts;self.game_auth=None
         self.confirm_recovery=confirm_recovery;self.process=None;self.stop=False
         self.path_states={};self.data_states={}
@@ -83,7 +90,18 @@ class SharedSession:
 
     def control(self,*args,**kwargs):
         environment=describe(self.binding['root'],self.binding['version'])
-        return BridgeControl(*args,backend=self.backend,auth_mode='littleskin' if self.game_auth else 'offline',adapter=environment['minecraft']+'-'+environment['loader'],**kwargs)
+        return BridgeControl(*args,backend=self.backend,auth_mode='littleskin' if self.game_auth else 'offline',adapter=environment['minecraft']+'-'+environment['loader'],name_data=self.name_data,**kwargs)
+
+    async def wait_for_historical_game_exit(self,version):
+        if version not in CALAMUS_VANILLA_RELEASES | FABRIC_114_RELEASES:
+            return
+        deadline=time.monotonic()+30
+        while self.process.poll() is None:
+            if time.monotonic()>deadline:
+                raise ValueError('游戏已报告保存，但旧版游戏进程仍未退出；保留存档以供恢复')
+            if self.guard:
+                self.guard.check()
+            await asyncio.sleep(.25)
 
     async def prepare_account(self):
         if self.binding.get('game_account'):
@@ -136,13 +154,15 @@ class SharedSession:
             self.backend=await asyncio.to_thread(select_backend,self.binding)
             self.notify('status','游戏控制：'+('Agent' if self.backend=='agent' else 'Bridge'))
             await self.prepare_java()
+            environment=await asyncio.to_thread(describe,self.binding['root'],self.binding['version'])
+            self.name_data=name_data_identity(self.binding,environment['minecraft'])
             await self.prepare_account()
             self.notify('status','正在核验房间权限和权威版本信息')
             items=await asyncio.to_thread(self.api,'/api/rooms')
             room=next((r for r in items if r['id']==self.room),None)
             if not room:raise ValueError('共享房间不存在')
             self.state('preflight',host=room.get('host'),mode=room.get('mode','AUTO'),epoch=room.get('epoch'))
-            validate(describe(self.binding['root'],self.binding['version']),room.get('environment'),backend=self.backend)
+            validate(environment,room.get('environment'),backend=self.backend)
             validate_account(self.binding,room.get('environment'))
             self.install_control(self.binding['run'])
             await asyncio.to_thread(self.api,base+'/join',{})
@@ -207,7 +227,7 @@ class SharedSession:
                 if head!=lease['head']:raise ValueError('云端版本与租约基准不一致')
                 identity=game_uuid(b['name'],b.get('uuid'))
                 self.notify('status','权威存档同步完成，正在校验玩家数据并启动世界')
-                await asyncio.to_thread(repair,world,b['java'],identity)
+                await asyncio.to_thread(repair,world,b['java'],identity,name_data=self.name_data)
                 self.bridge=self.control(world,identity,game_name=b['name'])
                 pending.parent.mkdir(parents=True,exist_ok=True)
                 pending.write_text(json.dumps({'room':self.room,'parent':head,'epoch':lease['epoch'],'identity':identity,'state':'loading'}),encoding='utf-8')
@@ -239,10 +259,11 @@ class SharedSession:
                 await asyncio.to_thread(self.api,base+'/uploading',credentials)
                 self.state('uploading',message='等待文件锁释放并增量上传最终存档')
                 self.notify('status','游戏已保存，正在等待存档关闭并上传')
+                await self.wait_for_historical_game_exit(environment['minecraft'])
                 deadline=time.monotonic()+30
                 while True:
                     try:
-                        await asyncio.to_thread(repair,world,b['java'],identity,True)
+                        await asyncio.to_thread(repair,world,b['java'],identity,True,name_data=self.name_data)
                         break
                     except ValueError as e:
                         if '仍被游戏占用' not in str(e) or time.monotonic()>deadline:raise
@@ -287,6 +308,8 @@ class OfflineInspection(SharedSession):
     """Keep the interrupted original; inspect a copy without publishing LAN."""
     async def run(self):
         self.backend=await asyncio.to_thread(select_backend,self.binding)
+        environment=await asyncio.to_thread(describe,self.binding['root'],self.binding['version'])
+        self.name_data=name_data_identity(self.binding,environment['minecraft'])
         self.state('inspection',role='离线恢复检查',message='不占Host、不建立LAN或隧道')
         await self.prepare_java()
         await self.prepare_account()
@@ -322,9 +345,10 @@ class OfflineInspection(SharedSession):
                 if self.process.poll() is not None:raise ValueError('检查副本未正常保存，不能上传候选')
                 await asyncio.sleep(.25)
             if self.bridge.error:raise ValueError(self.bridge.error)
+            await self.wait_for_historical_game_exit(environment['minecraft'])
             deadline=time.monotonic()+30
             while True:
-                try:await asyncio.to_thread(repair,world,self.binding['java'],identity,True);break
+                try:await asyncio.to_thread(repair,world,self.binding['java'],identity,True,name_data=self.name_data);break
                 except ValueError as e:
                     if '仍被游戏占用' not in str(e) or time.monotonic()>deadline:raise
                     await asyncio.sleep(.25)

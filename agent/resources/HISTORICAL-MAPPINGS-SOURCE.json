@@ -1,0 +1,254 @@
+{
+  "calamus": "https://github.com/OrnitheMC/calamus",
+  "fabric": "https://github.com/FabricMC/intermediary",
+  "calamus_seed_sha256": {
+    "1.8.5": {
+      "calamus": "fc8a637b9c1c2bafe274ee38338e73b559bc94ceb6d54f8ed665683054fcca7a",
+      "legacy_fabric_tiny": "ff325c61252d4a7e5dbe1488283e0a2c7ca50107bc9627e6dd126ee922f7d85a"
+    },
+    "1.12.2": {
+      "calamus": "fd7c521065288d0b6c5082138856698f900e8df36608a9e57e77a904962a7ee5",
+      "legacy_fabric_tiny": "0706159a47895516254a90e4a07c81583faed2cf780b0764932cdad1b51c3395"
+    },
+    "1.13.2": {
+      "calamus": "e1b0a4a3e48fdd9323760d366ca4b7b59a50c96183a79f09d11f57e31e859a81",
+      "legacy_fabric_tiny": "45c315c6c699999647550a10250e0ba67ddfe5050820753734aed5d9c13ea973"
+    }
+  },
+  "mojang_1.14.4_sha256": "2dd53a5e70ba493cf6e33c0fc52bbdf4c57f9429c7a13842565aa825fd44d910",
+  "versions": [
+    {
+      "version": "1.3.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.3.1/calamus-1.3.1-v2.jar",
+      "mapping_sha256": "8f9638cc8f4560b39fd62ec7be9420d141ad742f36b67dfea4720e35fb9b08b2",
+      "vanilla_sha256": "7fd4ac880fa237629efd6ce2863ece744936142865834a4dc802ccea76e3e34a"
+    },
+    {
+      "version": "1.3.2",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.3.2/calamus-1.3.2-v2.jar",
+      "mapping_sha256": "7ab7e1cd0b133751723954eb36886ea98dbee3e4be17bda43ee98d5c7a28714c",
+      "vanilla_sha256": "eaa95980f6d0bac1e081bdb184ce83ba9430c72e8c83f29d21edfa8370bb609c"
+    },
+    {
+      "version": "1.4.2",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.4.2/calamus-1.4.2-v2.jar",
+      "mapping_sha256": "b99f34c8b2bdc2c639ad7d4d61beb7ad1217deda960f4ea8240fc7dea9e86034",
+      "vanilla_sha256": "55fddc7a341328f38b4fae2c3795b79e5137520391504b4700ed45ea9f0744d4"
+    },
+    {
+      "version": "1.4.4",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.4.4/calamus-1.4.4-v2.jar",
+      "mapping_sha256": "d4f9ba0ab895f52823dc38a852e11eb6eff2a5ea9228b07907ec9c1cd3e97e0c",
+      "vanilla_sha256": "91feac229eaf06ba9e6edd5074fbedfeed0375db7a069dcc6a7a1c1c4478f69b"
+    },
+    {
+      "version": "1.4.5",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.4.5/calamus-1.4.5-v2.jar",
+      "mapping_sha256": "7d8fdb2214322f06297ee65d8aa277a821a86482a054e26630f0c137b5758bfd",
+      "vanilla_sha256": "91feac229eaf06ba9e6edd5074fbedfeed0375db7a069dcc6a7a1c1c4478f69b"
+    },
+    {
+      "version": "1.4.6",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.4.6/calamus-1.4.6-v2.jar",
+      "mapping_sha256": "1d81264cae59f15bd5f4605400a8058e3f96d442a00865577ba3698a98ac39db",
+      "vanilla_sha256": "7c41e06d75d957e01b3e3712429729c07f4b5d32f4dcf80b33c5022fa2b62f94"
+    },
+    {
+      "version": "1.4.7",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.4.7/calamus-1.4.7-v2.jar",
+      "mapping_sha256": "fc3240c5f3afaec2777592fe346e6f79cd01cf97df3eb78766f129c91de9d4cd",
+      "vanilla_sha256": "7c41e06d75d957e01b3e3712429729c07f4b5d32f4dcf80b33c5022fa2b62f94"
+    },
+    {
+      "version": "1.5.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.5.1/calamus-1.5.1-v2.jar",
+      "mapping_sha256": "e4490949a2fe157ce590a502dd3598c1c20cf677eee6fd7f507697a066191522",
+      "vanilla_sha256": "c76fdc710a5941aae9f68b914f9ce93e0b280d2d3ae4b66d184df6bd1ee2a38c"
+    },
+    {
+      "version": "1.5.2",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.5.2/calamus-1.5.2-v2.jar",
+      "mapping_sha256": "4990c960df4965e14b2aede54e7e288c2e9ec6045d9e152873229fd7464cc974",
+      "vanilla_sha256": "c340119b46c291898c267f5e73ee3e322062aee0f41408d7c70df146ff10e60d"
+    },
+    {
+      "version": "1.6.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.6.1/calamus-1.6.1-v2.jar",
+      "mapping_sha256": "44728dd51398bcdad8b11c9dff1cdfb2d2228cd83b0d98dfd37fb7f8ba534019",
+      "vanilla_sha256": "28cf2045aeec08e8ee30a2f2e1d0c58b9045ba4cdc709470ee823431661668a8"
+    },
+    {
+      "version": "1.6.2",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.6.2/calamus-1.6.2-v2.jar",
+      "mapping_sha256": "df224d70418e017905765d5e662961d1896da28a1907ae2611dacd0348bfd836",
+      "vanilla_sha256": "008294cd6cc60d456f1e5918869c74ba62d7a84a6a6957e3a21748c537ca5d8f"
+    },
+    {
+      "version": "1.6.4",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.6.4/calamus-1.6.4-v2.jar",
+      "mapping_sha256": "855d89f0a35064bead06da37cbc8b6b57e4f5e78f1b6838be2bc6d6d6c8753dd",
+      "vanilla_sha256": "6a588407200c469ee98fb04168ae3ca254df9bbe48db6e51fddbac90e72edbb1"
+    },
+    {
+      "version": "1.7.2",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.2/calamus-1.7.2-v2.jar",
+      "mapping_sha256": "7dba93e5b5e27fcc00438d7a891e02027dd262a2a9f1a90b2d1bb34e0b5ff25e",
+      "vanilla_sha256": "8de77bfad34d8bc54865cfc7d82b54087bfa986257e0abf41751a2ea1f8deeb9"
+    },
+    {
+      "version": "1.7.3",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.3/calamus-1.7.3-v2.jar",
+      "mapping_sha256": "befa82372642991fc96c19eca54755cc8b7b9a8a4b92897ef565add0283fa66d",
+      "vanilla_sha256": "9200a148c4c3a338f805a2e39d3669f55ef7f677276c4bebf403db5c7a53a5a7"
+    },
+    {
+      "version": "1.7.4",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.4/calamus-1.7.4-v2.jar",
+      "mapping_sha256": "36a044f55ce4b34273c8548ae072c86230c4b7ed1d6c1c1047394db1e771f3b5",
+      "vanilla_sha256": "9200a148c4c3a338f805a2e39d3669f55ef7f677276c4bebf403db5c7a53a5a7"
+    },
+    {
+      "version": "1.7.5",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.5/calamus-1.7.5-v2.jar",
+      "mapping_sha256": "4ef39f3f95087c1ee9ac2ee8ad76d1dd38a9f512c73fa260261d5689a7abff6c",
+      "vanilla_sha256": "658e1cce8b1776e3c48e49e46b39d3084066509370a313d1e3872211a6878939"
+    },
+    {
+      "version": "1.7.6",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.6/calamus-1.7.6-v2.jar",
+      "mapping_sha256": "ca4c1612d55f6e0cef0516c248177c322b92c0167aefe98f3bb3b6d5ffaced47",
+      "vanilla_sha256": "52429f28c3bdc9e01e480e8870f5d58e236c387e9b133335c50b89773a0c595f"
+    },
+    {
+      "version": "1.7.7",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.7/calamus-1.7.7-v2.jar",
+      "mapping_sha256": "e8988763d157c76d10b176f2ae84f344e09c758781725a31e92761dbf313f7c9",
+      "vanilla_sha256": "52429f28c3bdc9e01e480e8870f5d58e236c387e9b133335c50b89773a0c595f"
+    },
+    {
+      "version": "1.7.8",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.8/calamus-1.7.8-v2.jar",
+      "mapping_sha256": "59ab80196fce4c47b26a974d5cfc1ddb086bf7ac771b1073c729c11a965a69a5",
+      "vanilla_sha256": "518d72e93b3176ab707e5e07cb186ad10d278d711fe92ac33523b769c0275a72"
+    },
+    {
+      "version": "1.7.9",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.9/calamus-1.7.9-v2.jar",
+      "mapping_sha256": "934f70ff930fac0a281249b85aa99150bea9ed28ed9ff5d1b5aef61d3f199dc7",
+      "vanilla_sha256": "518d72e93b3176ab707e5e07cb186ad10d278d711fe92ac33523b769c0275a72"
+    },
+    {
+      "version": "1.7.10",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.7.10/calamus-1.7.10-v2.jar",
+      "mapping_sha256": "06709126a3528f1bc4e78358e0bd548f565f391cef51f9d85df17143bb63f58c",
+      "vanilla_sha256": "9723943489e334ec1b68b3e9bef72a9af60ba3f3c6f77a0bf48d16fe7836c988"
+    },
+    {
+      "version": "1.9",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.9/calamus-1.9-v2.jar",
+      "mapping_sha256": "beca93c60cf7de1861dfdcd8644450df9899dab6b173cf26efb04950f19e0d19",
+      "vanilla_sha256": "b17bb85997510cb0fd9e4ffbc2f58e354db842c1420db1af8c1a94a021167955"
+    },
+    {
+      "version": "1.9.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.9.1/calamus-1.9.1-v2.jar",
+      "mapping_sha256": "178a84252b0eaf59dec3e515dc438c14edbccee486302e3ba269917b6bb14822",
+      "vanilla_sha256": "fe0150d45c3583ab9f130ff6d92919925855e602b2c48c8b6f996e080b21b8b8"
+    },
+    {
+      "version": "1.9.2",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.9.2/calamus-1.9.2-v2.jar",
+      "mapping_sha256": "17788a135e60b7ea76ae42cd6efe228176b729383af100c253feee399c0d81f5",
+      "vanilla_sha256": "fe0150d45c3583ab9f130ff6d92919925855e602b2c48c8b6f996e080b21b8b8"
+    },
+    {
+      "version": "1.9.3",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.9.3/calamus-1.9.3-v2.jar",
+      "mapping_sha256": "9d396bcf6e06c6714ab9a5404e6e2f3421bc135b5b0a266e3f8b9e7404af942f",
+      "vanilla_sha256": "9b4057ca6101578b3addf3f622a3ff6758a6d2f6b5d99089f7b716d904822be0"
+    },
+    {
+      "version": "1.10",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.10/calamus-1.10-v2.jar",
+      "mapping_sha256": "de1e03b2c60be25423df1507024bb52dcad5b37c704137f42bdcf7315d5e57d0",
+      "vanilla_sha256": "d63d359d8bbead06662d58d67261db0014e4562346987d1327ca109bdfef157f"
+    },
+    {
+      "version": "1.10.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.10.1/calamus-1.10.1-v2.jar",
+      "mapping_sha256": "73da74ecf796bb2cd512bdba39bc89d7aa97a925e9ebf9835145751af3d7aa5b",
+      "vanilla_sha256": "d63d359d8bbead06662d58d67261db0014e4562346987d1327ca109bdfef157f"
+    },
+    {
+      "version": "1.11",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.11/calamus-1.11-v2.jar",
+      "mapping_sha256": "8d12bcd294be951477a247b2d27681fdf2d7d959aebbf23dae86e31f3f34f80e",
+      "vanilla_sha256": "070f24176988b9a7b4c4bb98c1f834bd940c48dee58a74eaaf8d9316e4b911cf"
+    },
+    {
+      "version": "1.11.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.11.1/calamus-1.11.1-v2.jar",
+      "mapping_sha256": "15bea5e65d3b3e6f6fabae372f0c45dfa255cb00f66e25b92e78933549158163",
+      "vanilla_sha256": "24f9ed0d5219aea61c61d439e70a2eb49c8a9f752c94ff8b92233242c4b85ea2"
+    },
+    {
+      "version": "1.12",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.12/calamus-1.12-v2.jar",
+      "mapping_sha256": "84a066d2f216831890a5a368871d6c82248053ba7f52ffd85e492fc12f8a2005",
+      "vanilla_sha256": "5a8aea01de1cdd84c4b1294b501c9c4448dd2123e55f2ab47e369f1ff5b28fac"
+    },
+    {
+      "version": "1.12.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.12.1/calamus-1.12.1-v2.jar",
+      "mapping_sha256": "7473978353e654fd12e2f24387da2d8ee46eabd06179396bf107f7274b6ae8e0",
+      "vanilla_sha256": "af6f0d0ff38bbfba2cb080f9fad5f88f9e44a517feaa498dfd13d54ddab7ab9f"
+    },
+    {
+      "version": "1.13",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.13/calamus-1.13-v2.jar",
+      "mapping_sha256": "c726445ede9a13f7208efbf2fe20ae013b5f696192c1dc799136468beee3b7c5",
+      "vanilla_sha256": "95befb696e043ff5409154133f63e7bec974e62ae0e28ee367277e29e35d8b6b"
+    },
+    {
+      "version": "1.13.1",
+      "mapping_url": "https://maven.ornithemc.net/releases/net/ornithemc/calamus/1.13.1/calamus-1.13.1-v2.jar",
+      "mapping_sha256": "b269750fd401142879748c9d90712d6936ea2e9b998d3c0fe03e2799047802b0",
+      "vanilla_sha256": "255ac4e92b0c5b977ec829e219e88406266f509911b28fb6d6f3a3b8aa275663"
+    },
+    {
+      "version": "1.14",
+      "mapping_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.14/intermediary-1.14-v2.jar",
+      "mapping_sha256": "45e354d58c74473865054faa62a229e30f46ba2019000affdb3fb748df3fde17",
+      "vanilla_sha256": "08b4d0156e92a901a986a965dd5ce21f75d97a54352de76d1fc335d8758e78dc",
+      "fabric_sha256": "f56a25a1bbdc0c3922370d16be8db162abb076045aa5884bdd48829b877acfcc"
+    },
+    {
+      "version": "1.14.1",
+      "mapping_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.14.1/intermediary-1.14.1-v2.jar",
+      "mapping_sha256": "486f4e72a87d697c5d9e155a49158bec28117faa73e3f1201c3f8a616b42569d",
+      "vanilla_sha256": "9f3d0fc9dba8271ed7c7e06941549186add3859ffab68fc4ca817dadd64c3cdf",
+      "fabric_sha256": "f56a25a1bbdc0c3922370d16be8db162abb076045aa5884bdd48829b877acfcc"
+    },
+    {
+      "version": "1.14.2",
+      "mapping_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.14.2/intermediary-1.14.2-v2.jar",
+      "mapping_sha256": "f73883d007c64858ae0f26533fe47ec5d3a051cede6892c8d6531fc5122e459e",
+      "vanilla_sha256": "9f3d0fc9dba8271ed7c7e06941549186add3859ffab68fc4ca817dadd64c3cdf",
+      "fabric_sha256": "f56a25a1bbdc0c3922370d16be8db162abb076045aa5884bdd48829b877acfcc"
+    },
+    {
+      "version": "1.14.3",
+      "mapping_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.14.3/intermediary-1.14.3-v2.jar",
+      "mapping_sha256": "f2e9990c00fa87ddc7158a95afb735a947ae26d1997b52916226e11c612542a9",
+      "vanilla_sha256": "a15e9d1af9db1e7891fa513c991cd7673022ee3a9085327390a490a0d5707a4a",
+      "fabric_sha256": "f56a25a1bbdc0c3922370d16be8db162abb076045aa5884bdd48829b877acfcc"
+    },
+    {
+      "version": "1.14.4",
+      "mapping_url": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.14.4/intermediary-1.14.4-v2.jar",
+      "mapping_sha256": "0d7786a3d6a4926a818d4cbb79ced019578f85ecc6ffdecb6d6725b5bd2706ea",
+      "vanilla_sha256": "98eb262ee0961e0cd0bb9edcc5de6c802ba03b73614e96d47ee257df5a9dadd5",
+      "fabric_sha256": "f56a25a1bbdc0c3922370d16be8db162abb076045aa5884bdd48829b877acfcc"
+    }
+  ]
+}

@@ -9,9 +9,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class BridgeControl:
-    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None,backend='bridge',auth_mode='offline',adapter='1.20.1-forge'):
+    def __init__(self,world,identity,inspect=False,join=None,config_dir=None,game_name=None,backend='bridge',auth_mode='offline',adapter='1.20.1-forge',name_data=None):
         self.world=Path(world).resolve();self.identity=identity
         self.game_name=game_name
+        self.name_data=name_data
         self.token=secrets.token_urlsafe(32)
         self.ready=threading.Event();self.saved=threading.Event();self.stop=False;self.port=None
         self.error=None;self.world_players=None
@@ -79,11 +80,14 @@ class BridgeControl:
         data={'endpoint':'http://127.0.0.1:'+str(self.server.server_port),
             'token':self.token,'world':str(self.world),'inspect':inspect,'identity':self.identity,'auth_mode':auth_mode,'adapter':adapter}
         if join:data['join']=join
+        if name_data:data['legacy_name']=name_data
         self.config.write_text(json.dumps(data),encoding='utf-8')
 
     def register_peer(self,identity):
-        from .launcher import game_uuid
+        from .launcher import game_uuid, offline_uuid
         name=identity['name'].lower();value=str(uuid.UUID(game_uuid(identity['name'],identity['uuid'])))
+        if self.name_data and (name!=identity['name'] or uuid.UUID(value).hex!=offline_uuid(name)):
+            raise ValueError('旧版房间要求固定的小写离线名称及其默认UUID')
         if uuid.UUID(value)==uuid.UUID(self.identity) or self.game_name and name==self.game_name.lower():
             raise ValueError('Player不能使用当前Host的名称或UUID')
         for existing_name,existing in self.peer_identities.items():

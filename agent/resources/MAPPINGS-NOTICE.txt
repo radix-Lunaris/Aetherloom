@@ -130,3 +130,8 @@ Legacy Fabric Intermediary and Legacy Yarn references (CC0-1.0)
 https://github.com/Legacy-Fabric/Legacy-Intermediaries
 https://github.com/Legacy-Fabric/yarn
 Source archives and SHA-256 values are listed in LEGACY-MAPPINGS-SOURCE.json.
+
+Historical aliases also use Ornithe Calamus (CC0-1.0) and version-specific Fabric Intermediary (CC0-1.0).
+https://github.com/OrnitheMC/calamus
+https://github.com/FabricMC/intermediary
+Input and derived hashes are listed in HISTORICAL-MAPPINGS-SOURCE.json.
