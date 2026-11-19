@@ -61,6 +61,14 @@ public class RepairChecks {
         assert !NbtIo.readCompressed(referenced.resolve("level.dat")).getCompound("Data").contains("singleplayer_uuid");
         assert NbtIo.readCompressed(referencedData.resolve(A+".dat")).getInt("XpLevel",0)==31;
         assert NbtIo.readCompressed(referencedData.resolve(B+".dat")).getInt("XpLevel",0)==72;
+        Path legacy=base.resolve("legacy-player");
+        Tag legacyPlayer=Tag.newCompound();
+        legacyPlayer.put("UUIDMost",Tag.ofLong(A.getMostSignificantBits()));
+        legacyPlayer.put("UUIDLeast",Tag.ofLong(A.getLeastSignificantBits()));
+        legacyPlayer.put("XpLevel",Tag.ofInt(55));
+        level(legacy,legacyPlayer);
+        AetherloomRepair.repair(legacy,B,false);
+        assert NbtIo.readCompressed(legacy.resolve("playerdata/"+A+".dat")).getInt("XpLevel",0)==55;
         System.out.println("Repair checks passed: single-world, stale external conflict, verified save, unknown/zero UUID, corrupt NBT, idempotence, backup failure");
     }
 }

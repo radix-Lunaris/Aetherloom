@@ -59,7 +59,7 @@ class AgentControlTests(unittest.TestCase):
         from unittest.mock import patch
         binding = {'root':'installed', 'version':'vanilla', 'control_backend':'auto'}
         for version, supported in (
-            ('1.13.2',False), ('1.14.3',False), ('1.14.4',True),
+            ('1.7.10',False), ('1.8.5',True), ('1.13.2',True), ('1.14.3',False), ('1.14.4',True),
             ('1.19.2',True), ('1.21.11',True), ('26.3',True),
         ):
             with self.subTest(version=version), patch('aetherloom.environment.describe',
@@ -69,3 +69,27 @@ class AgentControlTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(ValueError,'仍可离线启动'):
                         select_backend(binding)
+
+    def test_legacy_controller_has_exact_bundled_namespaces(self):
+        import hashlib
+        from aetherloom.vanilla_control import LEGACY_LAN_RELEASES
+        folder=Path(__file__).resolve().parents[1]/'agent/resources'
+        source=json.loads((folder/'LEGACY-MAPPINGS-SOURCE.json').read_text(encoding='utf-8'))
+        self.assertEqual(set(LEGACY_LAN_RELEASES),{row['version'] for row in source['versions']})
+        for row in source['versions']:
+            for flavor in ('vanilla','fabric'):
+                with self.subTest(version=row['version'], flavor=flavor):
+                    file=folder/f"legacy-{flavor}-{row['version']}.properties"
+                    data=file.read_text(encoding='ascii').encode('ascii')
+                    self.assertEqual(hashlib.sha256(data).hexdigest(),row[flavor+'_sha256'])
+
+    def test_legacy_fabric_requires_matching_intermediary(self):
+        from unittest.mock import patch
+        binding = {'root':'installed', 'version':'renamed', 'control_backend':'auto'}
+        env = {'minecraft':'1.8.5','loader':'fabric','loader_version':'0.19.3'}
+        with patch('aetherloom.environment.describe',return_value=env), patch('aetherloom.launcher.manifest') as manifest:
+            manifest.return_value={'libraries':[{'name':'net.legacyfabric:intermediary:1.8.5'}]}
+            self.assertEqual(select_backend(binding),'agent')
+            manifest.return_value={'libraries':[{'name':'net.legacyfabric:intermediary:1.8.6'}]}
+            with self.assertRaisesRegex(ValueError,'Intermediary'):
+                select_backend(binding)

@@ -27,6 +27,8 @@ public final class Agent {
     static volatile boolean neoForge;
     static volatile boolean directHooks;
     static boolean earlyProfile;
+    static boolean legacy;
+    static volatile Object selectedLegacyServer;
     static boolean configurationApi,postTickApi;
     static Object hostProfile,haltedServer;
     static Object handledBackup;
@@ -85,6 +87,10 @@ public final class Agent {
             Properties aliases=new Properties();
             String prefix=vanilla?"/vanilla-":"/fabric-";
             InputStream resource=named?null:Agent.class.getResourceAsStream(prefix+version+".properties");
+            if(!named && resource==null) {
+                resource=Agent.class.getResourceAsStream((vanilla?"/legacy-vanilla-":"/legacy-fabric-")+version+".properties");
+                legacy=resource!=null;
+            }
             if(knot && !named && resource==null) {
                 String baseline=fabricBaseline(version);
                 resource=Agent.class.getResourceAsStream("/fabric-"+baseline+".properties");
@@ -97,7 +103,7 @@ public final class Agent {
             hooks.getField("lifecycle").set(null,(BiConsumer<Object,String>)Agent::serverLifecycle);
             hooks.getField("identity").set(null,(UnaryOperator<Object>)Agent::profileIdentity);
             earlyProfile=named;
-            instrumentation.addTransformer(new LoaderTransformer(aliases,earlyProfile));
+            instrumentation.addTransformer(new LoaderTransformer(aliases,earlyProfile,legacy));
             names.clear();names.putAll(aliases);directHooks=true;
         }
         Thread worker=new Thread(()->{
@@ -126,7 +132,10 @@ public final class Agent {
                 while(!exitRequested && (directHooks || !finished)) {
                     if(!finished)stop=request("",null).contains("\"stop\": true");
                     if(directHooks && tickPending.compareAndSet(false,true)) {
-                        ((Executor)minecraft()).execute(()->{try{tick();}catch(Throwable error){fail(error);}finally{tickPending.set(false);}});
+                        Runnable update=()->{try{tick();}catch(Throwable error){fail(error);}finally{tickPending.set(false);}};
+                        Object client=minecraft();
+                        if(legacy)call(client,"submitLegacyTick",(Callable<Void>)()->{update.run();return null;});
+                        else ((Executor)client).execute(update);
                     }
                     Thread.sleep(directHooks?100:500);
                 }
@@ -329,10 +338,27 @@ public final class Agent {
     }
     static Object minecraft() throws Exception {return call(type("net.minecraft.client.Minecraft"),"getInstance");}
     static boolean selected(Object server) throws Exception {
+        if(legacy) {
+            if(server==selectedLegacyServer)return true;
+            File directory=(File)field(minecraft(),"legacyRunDirectory");
+            String folder=(String)call(server,"legacyLevelName");
+            if(folder==null || folder.isEmpty())return false;
+            Path saves=directory.toPath().resolve("saves").toRealPath();
+            Path selected=saves.resolve(folder).normalize();
+            if(!saves.equals(selected.getParent()) || !Files.isSameFile(selected,Paths.get(config.getProperty("world"))))return false;
+            selectedLegacyServer=server;
+            return true;
+        }
         Object resource=field(type("net.minecraft.world.level.storage.LevelResource"),"ROOT");
         return Files.isSameFile((Path)call(server,"getWorldPath",resource),Paths.get(config.getProperty("world")));
     }
     static void leave(Object mc) throws Exception {
+        if(legacy) {
+            Object server=call(mc,"getSingleplayerServer");
+            if(server!=null)call(server,"halt");
+            call(mc,"legacyDetach",new Object[]{null});
+            return;
+        }
         Object level=field(mc,"level");
         if(level!=null)try{call(level,"disconnect");}catch(NoSuchMethodException newer){/* Minecraft owns disconnect. */}
         Object server=call(mc,"getSingleplayerServer");if(server!=null)call(server,"halt",false);
@@ -354,6 +380,10 @@ public final class Agent {
             if(type("net.minecraft.client.gui.screens.TitleScreen").isInstance(screen)) {
                 worldOpenRequested=true;
                 String folder=Paths.get(config.getProperty("world")).getFileName().toString();
+                if(legacy) {
+                    call(mc,"legacyOpenWorld",folder,folder,null);
+                    return;
+                }
                 Object flows;
                 try {flows=call(mc,"createWorldOpenFlows");}
                 catch(NoSuchMethodException older){call(mc,"loadLevel",folder);return;}
@@ -362,7 +392,7 @@ public final class Agent {
                 return;
             }
         }
-        if(!config.containsKey("join") && !loaded && !stopping && player==null && server==null)confirmSelectedBackup(mc);
+        if(!legacy && !config.containsKey("join") && !loaded && !stopping && player==null && server==null)confirmSelectedBackup(mc);
         // QuickPlay may have started the integrated server before registration.
         // Recover only the explicitly selected world, never an arbitrary world.
         if(!config.containsKey("join") && !loaded && pending==null && !stopping && server!=null && player!=null && level!=null && selected(server))pending=server;
@@ -396,16 +426,36 @@ public final class Agent {
             ))throw new IllegalStateException("Required lifecycle/identity hooks were not installed");
             pending=null;int port=0;
             if(!Boolean.parseBoolean(config.getProperty("inspect"))) {
-                try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
                 call(server,"setUsesAuthentication","littleskin".equals(config.getProperty("auth_mode")));
-                Object scope;
-                try {scope=field(type("net.minecraft.server.MinecraftServer$MultiplayerScope"),"LAN");}
-                catch(ClassNotFoundException older){scope=call(server,"getDefaultGameType");}
-                if(!Boolean.TRUE.equals(call(server,"publishServer",scope,false,port)))throw new IllegalStateException("LAN publication failed");
+                if(legacy) {
+                    port=publishLegacy(server);
+                } else {
+                    try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
+                    Object scope;
+                    try {scope=field(type("net.minecraft.server.MinecraftServer$MultiplayerScope"),"LAN");}
+                    catch(ClassNotFoundException older){scope=call(server,"getDefaultGameType");}
+                    if(!Boolean.TRUE.equals(call(server,"publishServer",scope,false,port)))throw new IllegalStateException("LAN publication failed");
+                }
             }
             checkIdentity(player);loaded=true;emit("ready",port);
         }
         if(stop && !stopping) {stopping=true;if(level!=null || server!=null)leave(mc);else call(mc,"stop");}
+    }
+    static int publishLegacy(Object server) throws Exception {
+        Object mode=call(server,"getDefaultGameType");
+        String reported;
+        try {reported=(String)call(server,"publishServer",mode,false);}
+        catch(NoSuchMethodException explicitPort) {
+            int port;
+            try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
+            if(!Boolean.TRUE.equals(call(server,"publishServer",mode,false,port)))
+                throw new IllegalStateException("Legacy LAN publication failed");
+            return port;
+        }
+        if(reported==null || !reported.matches("[0-9]{1,5}"))throw new IllegalStateException("Legacy LAN failed to report a port");
+        int port=Integer.parseInt(reported);
+        if(port<1 || port>65535)throw new IllegalStateException("Legacy LAN returned an invalid port");
+        return port;
     }
     static boolean capturedSelected(Object value,int depth,Set<Object> seen) throws Exception {
         if(value==null || depth>3 || !seen.add(value))return false;
@@ -433,6 +483,15 @@ public final class Agent {
     }
     static void join(Object mc) throws Exception {
         if(pinger==null && type("net.minecraft.client.gui.screens.TitleScreen").isInstance(screen(mc))) {
+            if(legacy) {
+                String address=config.getProperty("join");
+                if(!address.matches("127\\.0\\.0\\.1:[0-9]{1,5}"))throw new IllegalArgumentException("Legacy join requires the managed loopback proxy");
+                Object title=make("net.minecraft.client.gui.screens.TitleScreen");
+                Object connect=make("net.minecraft.client.gui.screens.ConnectScreen",title,mc,"127.0.0.1",Integer.parseInt(address.substring(10)));
+                connecting=true;
+                call(mc,"legacySetScreen",connect);
+                return;
+            }
             Object serverType=modern()?field(type("net.minecraft.client.multiplayer.ServerData$Type"),"LAN"):Boolean.FALSE;
             target=make("net.minecraft.client.multiplayer.ServerData","Aetherloom",config.getProperty("join"),serverType);
             if(config.getProperty("adapter").endsWith("-vanilla")) {
@@ -477,7 +536,8 @@ public final class Agent {
     }
     static void checkIdentity(Object player) throws Exception {
         UUID expected=UUID.fromString(config.getProperty("identity"));
-        if((modern() || directHooks) && config.containsKey("join") && !"littleskin".equals(config.getProperty("auth_mode")) && !expected.equals(call(player,"getUUID"))) {
+        Object actual=call(player,"getUUID");
+        if((modern() || directHooks) && config.containsKey("join") && !"littleskin".equals(config.getProperty("auth_mode")) && !expected.equals(actual)) {
             // Forge 52's configuration barrier runs after the login profile
             // packet. The Host validates and applies the member UUID before
             // loading player data; align the offline client's earlier profile.
@@ -490,7 +550,10 @@ public final class Agent {
             Object correctedLocal=resolveProfile(localProfile,expected);
             if(corrected!=profile)replaceProfileField(player,"gameProfile",profile,corrected);
             if(correctedLocal!=localProfile)replaceProfileField(connection,"localGameProfile",localProfile,correctedLocal);
-            call(player,"setUUID",expected);
+            if(legacy) {
+                try {call(player,"setUUID",expected);}
+                catch(NoSuchMethodException older){replaceProfileField(player,"legacyUuid",actual,expected);}
+            } else call(player,"setUUID",expected);
             System.out.println("AETHERLOOM_AGENT_OFFLINE_CONFIGURATION_IDENTITY_ALIGNED");
         }
         if(!expected.equals(call(player,"getUUID")))throw new IllegalStateException("Actual player UUID differs from managed identity");

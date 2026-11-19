@@ -25,15 +25,23 @@ def select_backend(binding):
     if 'root' not in binding or 'version' not in binding:
         return 'bridge' if value == 'auto' else value
     from .environment import describe, loader_family
+    from .vanilla_control import LEGACY_LAN_RELEASES, supports_vanilla_control
     environment = describe(binding['root'], binding['version'])
     if value != 'agent' and (
         environment['minecraft'], environment['loader'], loader_family(environment)
     ) == ('1.20.1', 'forge', '47'):
         return 'bridge'
     if environment['loader'] == 'vanilla':
-        from .vanilla_control import supports_vanilla_control
         if not supports_vanilla_control(environment['minecraft']):
             raise ValueError('该原版尚无对应联机控制，仍可离线启动')
     elif environment['loader'] not in ('forge', 'neoforge', 'fabric', 'quilt'):
         raise ValueError('当前加载器没有联机控制实现')
+    elif environment['minecraft'] in LEGACY_LAN_RELEASES:
+        if environment['loader'] != 'fabric':
+            raise ValueError('此旧版联机需要原版或 Legacy Fabric 实例')
+        from .launcher import manifest
+        expected = 'net.legacyfabric:intermediary:'+environment['minecraft']
+        libraries = manifest(Path(binding['root']), binding['version']).get('libraries', [])
+        if not any(lib.get('name') == expected for lib in libraries):
+            raise ValueError('此 Legacy Fabric 实例缺少对应的 Intermediary 元数据')
     return 'agent'

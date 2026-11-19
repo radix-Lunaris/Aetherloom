@@ -1,0 +1,112 @@
+{
+  "license": "CC0-1.0",
+  "named_reference": "https://github.com/Legacy-Fabric/yarn",
+  "intermediary_reference": "https://github.com/Legacy-Fabric/Legacy-Intermediaries",
+  "versions": [
+    {
+      "version": "1.8",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8/intermediary-1.8-v2.jar",
+      "intermediary_sha256": "abf90932265e0fffb3ebf632d72ab05c0ea41eef98140a0fbcd40ec38cc3d174",
+      "vanilla_sha256": "72f9976deaab35cc22c090ac93766ea41931daf27a47f0105274bb55e1e7e5fe",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.1",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.1/intermediary-1.8.1-v2.jar",
+      "intermediary_sha256": "e1a61c7a7b1d379988b98701dd3960b55a317810c670913e4d2b123792143601",
+      "vanilla_sha256": "24d930aead2756bd0d5dc52df0d12b8c14a0d606215ebdcb4c25416f4799026d",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.2",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.2/intermediary-1.8.2-v2.jar",
+      "intermediary_sha256": "2378d3d3619a5ac83e1cc05a830e331bcb173b82719ac3776ba27983102ee20e",
+      "vanilla_sha256": "b325cc1f0fd62f0c21c801386132ddc616e463c7c1f2032437ed9ff16876f3f3",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.3",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.3/intermediary-1.8.3-v2.jar",
+      "intermediary_sha256": "2378d3d3619a5ac83e1cc05a830e331bcb173b82719ac3776ba27983102ee20e",
+      "vanilla_sha256": "b325cc1f0fd62f0c21c801386132ddc616e463c7c1f2032437ed9ff16876f3f3",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.4",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.4/intermediary-1.8.4-v2.jar",
+      "intermediary_sha256": "2609759c10976bc661dfa35427283f3483a5c16eb6bc6337ad5e11fe15a1d03d",
+      "vanilla_sha256": "ea84c43376db58022602243d516484431807240f242353efd48dc8db8167633f",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.5",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.5/intermediary-1.8.5-v2.jar",
+      "intermediary_sha256": "925c9c400ad8a830ec5b72cd54c0c9d23a8fdfca61b2c370454c3d68b0daf473",
+      "vanilla_sha256": "ea84c43376db58022602243d516484431807240f242353efd48dc8db8167633f",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.6",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.6/intermediary-1.8.6-v2.jar",
+      "intermediary_sha256": "61168be8e8c05c36355b0270f2a63078d9922c65bd446a01384a95cabe838836",
+      "vanilla_sha256": "ea84c43376db58022602243d516484431807240f242353efd48dc8db8167633f",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.7",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.7/intermediary-1.8.7-v2.jar",
+      "intermediary_sha256": "438326770b21a376eb2fa430f5b106c0e799dc74ad2d026a0bf4911f1676bf9d",
+      "vanilla_sha256": "ea84c43376db58022602243d516484431807240f242353efd48dc8db8167633f",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.8",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.8/intermediary-1.8.8-v2.jar",
+      "intermediary_sha256": "38a6f20db416d262a46767284f6c13b19d71bcd95ff90c9699ce946293346de0",
+      "vanilla_sha256": "ea84c43376db58022602243d516484431807240f242353efd48dc8db8167633f",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.8.9",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.8.9/intermediary-1.8.9-v2.jar",
+      "intermediary_sha256": "cebb55a60d94cb0a8831e1e4a944214036208f9b39557381f76f1e4c9636a2b6",
+      "vanilla_sha256": "ea84c43376db58022602243d516484431807240f242353efd48dc8db8167633f",
+      "fabric_sha256": "c5bc979ecfedded41f2d0cdf2df9e0696dbf820bf6f442c7927a28d0b7e158b2"
+    },
+    {
+      "version": "1.9.4",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.9.4/intermediary-1.9.4-v2.jar",
+      "intermediary_sha256": "5f2f259cc671ab80509c18f8704fdd81e423266d0113f1d2f493c66bc4dd04d3",
+      "vanilla_sha256": "1e4e3f5d4bfc2602c5fedc650b1dcfb0892381b7ed0f2c1bcebaff9dbf47a448",
+      "fabric_sha256": "520f87d315e49d6744428aa59d2abe46ac2c69e8cdec28f15bac82ca5f28a6e2"
+    },
+    {
+      "version": "1.10.2",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.10.2/intermediary-1.10.2-v2.jar",
+      "intermediary_sha256": "c0c08c963621be57fcb887546c324cf11991d66267e5c721624b79d3ebc7d69b",
+      "vanilla_sha256": "b19f62d2d249d7d2b5121a1965b2d37a2ec70e239ca5d261d42168f7cbe05936",
+      "fabric_sha256": "520f87d315e49d6744428aa59d2abe46ac2c69e8cdec28f15bac82ca5f28a6e2"
+    },
+    {
+      "version": "1.11.2",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.11.2/intermediary-1.11.2-v2.jar",
+      "intermediary_sha256": "8d8ea9df4419708142d633be2b013a1718dbda79d884ad0c4a6bdebb57c2cf15",
+      "vanilla_sha256": "0158e85f2405a138af8a4c9002b589ba16c784514b618e32ff7eeedfbad5df3c",
+      "fabric_sha256": "520f87d315e49d6744428aa59d2abe46ac2c69e8cdec28f15bac82ca5f28a6e2"
+    },
+    {
+      "version": "1.12.2",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.12.2/intermediary-1.12.2-v2.jar",
+      "intermediary_sha256": "e7f9d03f644b4fa8c49132d76bb9a3b5262eb74ae5fd625dbcf2b1597426c424",
+      "vanilla_sha256": "0aa86568d1be4bfdfc46f4aa7db8043129a22ce7da3561de7f2e0bfbc74ac809",
+      "fabric_sha256": "520f87d315e49d6744428aa59d2abe46ac2c69e8cdec28f15bac82ca5f28a6e2"
+    },
+    {
+      "version": "1.13.2",
+      "intermediary_url": "https://repo.legacyfabric.net/legacyfabric/net/legacyfabric/intermediary/1.13.2/intermediary-1.13.2-v2.jar",
+      "intermediary_sha256": "cfc603d7847bed70d72f24868ebe445050784da9d65f3ab1fc7f6bb0d1c5117b",
+      "vanilla_sha256": "b3dac162b7453220e15adeb40fdddc7ed33f19dde37a9b7786d3543fcbd98053",
+      "fabric_sha256": "566367d884b8f237a8180bc30bee9bad5fc1be080b1886d6c479b8cb3839fca1"
+    }
+  ]
+}

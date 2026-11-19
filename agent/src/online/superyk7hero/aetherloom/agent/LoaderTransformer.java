@@ -9,10 +9,12 @@ import org.objectweb.asm.*;
 public final class LoaderTransformer implements ClassFileTransformer {
     final Properties names;
     final boolean earlyProfile;
+    final boolean legacy;
     static final String HOOK="online/superyk7hero/aetherloom/agent/BootstrapHooks";
-    public LoaderTransformer(Properties names,boolean earlyProfile){
+    public LoaderTransformer(Properties names,boolean earlyProfile,boolean legacy){
         this.names=names;
         this.earlyProfile=earlyProfile;
+        this.legacy=legacy;
     }
     boolean named(String owner,String semantic,String actual) {
         return Arrays.asList((names.getProperty(owner.replace('/','.')+"."+semantic,semantic)+","+semantic).split(",")).contains(actual);
@@ -27,7 +29,7 @@ public final class LoaderTransformer implements ClassFileTransformer {
             reader.accept(new ClassVisitor(Opcodes.ASM9,writer) {
                 public MethodVisitor visitMethod(int access,String method,String descriptor,String signature,String[] exceptions) {
                     MethodVisitor delegate=super.visitMethod(access,method,descriptor,signature,exceptions);
-                    boolean halt=name.equals(server) && named(name,"halt",method) && descriptor.equals("(Z)V");
+                    boolean halt=name.equals(server) && named(name,"halt",method) && descriptor.equals(legacy?"()V":"(Z)V");
                     boolean save=name.equals(server) && named(name,"stopServer",method) && descriptor.equals("()V");
                     boolean run=name.equals(server) && named(name,"runServer",method) && descriptor.equals("()V");
                     boolean profile=name.equals(player) && method.equals("<init>");

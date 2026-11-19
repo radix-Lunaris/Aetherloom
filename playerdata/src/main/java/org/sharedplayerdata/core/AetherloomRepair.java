@@ -28,7 +28,7 @@ public class AetherloomRepair {
             return;
         }
         if (player==null) return;
-        UUID owner=Uuids.fromIntArray(player.getIntArray("UUID"));
+        UUID owner=embeddedUuid(player);
         if (Uuids.isNil(owner)) throw new IOException("Embedded player ownership is unknown; manual review required");
         if (completedSession && !owner.equals(target)) throw new IOException("Saved player differs from verified Host identity");
         // Every operation has an immutable backup; failures never count as clean.
@@ -55,6 +55,18 @@ public class AetherloomRepair {
         Path levelTemp=world.resolve("level.dat.aetherloom-"+UUID.randomUUID()+".tmp");
         NbtIo.writeCompressed(root,levelTemp);
         replace(levelTemp,level);
+    }
+
+    private static UUID embeddedUuid(Tag player) throws IOException {
+        UUID uuid=Uuids.fromIntArray(player.getIntArray("UUID"));
+        Tag most=player.asMap().get("UUIDMost"), least=player.asMap().get("UUIDLeast");
+        if (most==null && least==null) return uuid;
+        if (most==null || least==null || most.type()!=Tag.LONG || least.type()!=Tag.LONG)
+            throw new IOException("Invalid legacy UUID fields");
+        UUID legacy=new UUID((Long)most.rawValue(),(Long)least.rawValue());
+        if (player.contains("UUID") && !legacy.equals(uuid))
+            throw new IOException("Conflicting legacy and current UUID");
+        return legacy;
     }
 
     private static void repairReferencedPlayer(Path world, Path level, Tag root, Tag data,
@@ -92,7 +104,7 @@ public class AetherloomRepair {
         try {
             if (args.length!=3) throw new IllegalArgumentException("prepare|saved world UUID");
             if (!args[0].equals("prepare") && !args[0].equals("saved")) throw new IllegalArgumentException("Invalid mode");
-            repair(Path.of(args[1]),UUID.fromString(args[2]),args[0].equals("saved"));
+            repair(Paths.get(args[1]),UUID.fromString(args[2]),args[0].equals("saved"));
             System.out.println("OK");
         } catch (Throwable e) {
             System.err.println(e.getMessage());
