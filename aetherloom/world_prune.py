@@ -34,7 +34,7 @@ def clean_copy(world, threshold, confirm=None):
                 if any(v.reason in ('skip:external','skip:truncated') for v in parsed.verdicts.values()):
                     protected.add((item.dimension,Path(item.path).name))
         plans = {
-            Path(item.path).relative_to(world): tuple(sorted(
+            Path(item.path).resolve().relative_to(world): tuple(sorted(
                 index for index, verdict in item.verdicts.items() if verdict.reason == 'prune'
             ))
             for item in report.regions

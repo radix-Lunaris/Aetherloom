@@ -1,4 +1,4 @@
-# Aetherloom v0.4.0a14 — 在线启动、打洞与存档维护
+# Aetherloom v0.4.0a15 — 在线启动、打洞与存档维护
 
 - Forge 1.21.1 从游戏主菜单打开指定共享存档，避开已观察到的 Quick Play 资源初始化崩溃。
 - LittleSkin 从房间准入选项移除，继续提供游戏身份和皮肤来源。房间成员和游戏 UUID 仍由 Aetherloom 会话验证。
