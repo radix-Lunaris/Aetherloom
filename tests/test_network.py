@@ -14,6 +14,39 @@ from aetherloom.vendor.craftlink.auto_stream import Frame,Kind
 
 
 class NetworkTests(unittest.TestCase):
+    def test_craftlink_candidate_requires_scoped_authenticated_socket(self):
+        from aetherloom.p2p import craftlink_candidate
+        from aetherloom.rendezvous import Rendezvous
+        from types import SimpleNamespace
+        auth=Rendezvous('127.0.0.1:0')
+        for side in ('host','player'):auth.register(side)
+        def api(peer,path):
+            if path=='/health':return {'stun_ports':[52718,52719]}
+            opposite='player' if peer=='host' else 'host'
+            return {'available':True,'peer':auth.endpoint(opposite),'peer_nat':auth.profile(opposite),
+                    'port':auth.socket.getsockname()[1]}
+        async def profile(*args,**kwargs):
+            return SimpleNamespace(nat_type=SimpleNamespace(value='cone'),
+                filtering=SimpleNamespace(value='apdf'),per_ip_pool=False)
+        async def connect():
+            import functools
+            stop=threading.Event()
+            participants=[]
+            for side in ('host','player'):
+                info={'sid':'ab'*16,'side':side,'host':'host','player':'player',
+                      'punch_key':side,'shared':'ef'*32}
+                participants.append(craftlink_candidate(info,functools.partial(api,side),'http://127.0.0.1',stop))
+            results=await asyncio.gather(*participants)
+            try:
+                self.assertEqual(results[0][1],('127.0.0.1',results[1][0].getsockname()[1]))
+                self.assertEqual(results[1][1],('127.0.0.1',results[0][0].getsockname()[1]))
+            finally:
+                for client,_ in results:client.close()
+        try:
+            with patch('aetherloom.p2p.stun.measure',side_effect=profile):
+                asyncio.run(connect())
+        finally:auth.close()
+
     def test_host_probe_requires_a_listening_loopback_socket(self):
         with socket.socket() as local:
             local.bind(('127.0.0.1',0))

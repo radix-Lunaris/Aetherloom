@@ -7,6 +7,7 @@ import time
 import urllib.error
 import urllib.request
 from .store import Authority
+from .launcher import inside
 from .sync import snapshot, materialize
 from .world_lock import closed_world
 from .diagnostics import event
@@ -106,10 +107,32 @@ class CloudWorld:
         if result['version'] is None:raise ValueError('此房间尚未发布共同存档，请由所有者先发布')
         self.cache._validate(result['manifest'],check_blobs=False)
         sizes={p[2]:p[1] for e in result['manifest'].values() for p in e['pieces']}
+        world=Path(world)
         total=sum(sizes.values());checked=0;missing=[]
+        # Reuse matching pieces from an existing checkout even after its cache
+        # was cleared. No local bytes are trusted without the manifest hash.
+        local_sources={}
+        for rel,entry in result['manifest'].items():
+            target=inside(world,rel)
+            if not target.is_file():continue
+            for offset,size,digest in entry['pieces']:
+                local_sources.setdefault(digest,(target,offset,size))
         for h in sorted(sizes):
             path=self.cache.root/'blobs'/h[:2]/h
-            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=h:missing.append(h)
+            valid=path.is_file() and path.stat().st_size==sizes[h] and hashlib.sha256(path.read_bytes()).hexdigest()==h
+            if not valid and h in local_sources:
+                target,offset,size=local_sources[h]
+                if 0<size<=4*1024*1024:
+                    try:
+                        with target.open('rb') as source:
+                            source.seek(offset)
+                            data=source.read(size)
+                    except OSError:
+                        data=b''
+                    if len(data)==size and hashlib.sha256(data).hexdigest()==h:
+                        self.cache.put_blob(data)
+                        valid=True
+            if not valid:missing.append(h)
             checked+=sizes[h];report.emit('verify',checked,total,5,20,message='校验本地数据块缓存')
         transfer_total=sum(sizes[h] for h in missing);received=0
         report.emit('transfer',0,transfer_total,20,70,message='仅下载本地缺失的数据块')

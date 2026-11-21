@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/radix-Lunaris/MCsaves-sync",
+  "commit": "b31d0f9c4dd89090fd90ee5c3e8d5193baf4c154",
+  "sha256": {
+    "client/core/chunk_prune.py": "7c0da52059211b87be23ce7916626855b8cc55fc63173574578c34bbcf97c464",
+    "client/core/nbt.py": "409b33a08e63c57d430d67208176bbd44d49f3eb3e1f2d41d4deb9448a55d9d3",
+    "client/core/nbt_scan.py": "f9c07abf560edc1a38e8a508842341016d304d49eaf8f4eee34a69337e0d075a",
+    "client/core/nbt_typed.py": "16bd63d5e523cf35fa1c76d333cc5ca649cb3623bb85c98575b7d7fc5fe2ff66"
+  },
+  "changes": "Relative imports only; Aetherloom uses preview and single-region rewrite on a copy."
+}

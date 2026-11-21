@@ -36,3 +36,26 @@ class SyncTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 materialize(root/"bad",m,s)
 
+
+    def test_pruning_publishes_a_copy_without_mutating_source(self):
+        from unittest.mock import patch
+        from aetherloom.world_prune import clean_copy
+        from aetherloom.vendor.mcsync.chunk_prune import PruneReport,RegionReport,ChunkVerdict
+        with tempfile.TemporaryDirectory() as directory:
+            world=Path(directory)/'source'
+            (world/'region').mkdir(parents=True)
+            (world/'level.dat').write_bytes(b'world')
+            region=world/'region/r.0.0.mca'
+            original=b'terrain'
+            region.write_bytes(original)
+            report=PruneReport(regions=[RegionReport(str(region),kind='region',
+                prune=1,verdicts={1:ChunkVerdict(1,reason='prune')})])
+            with patch('aetherloom.world_prune.chunk_prune.scan',return_value=report), patch(
+                'aetherloom.world_prune.chunk_prune.parse_region',
+                return_value=RegionReport('',verdicts={1:ChunkVerdict(1,data=b'data')})):
+                plan=clean_copy(world,1)
+                copy=clean_copy(world,1,plan)
+            self.assertEqual(region.read_bytes(),original)
+            self.assertFalse((copy/'region/r.0.0.mca').exists())
+            authority=Authority(Path(directory)/'cache')
+            self.assertNotIn('region/r.0.0.mca',snapshot(copy,authority))

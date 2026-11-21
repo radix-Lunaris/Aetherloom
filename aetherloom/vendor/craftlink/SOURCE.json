@@ -27,5 +27,11 @@
     "original_sha256": "4b420816b124a94e3e82ceb2aa859a736a57e12c5d2ce0ee84eb95d0cab9610d",
     "vendored_sha256": "7dd83896a9c7c27c5958a2963c5cf3a2533fc30911c3c129b034eb7b2836b113",
     "patch": "Redirect relay_config to local environment config; tolerate diagnostic-console logging failures. Wire/probe, limiter and alternate-origin behavior unchanged."
+  },
+  "punch": {
+    "source_path": "client/mclink/core/punch.py",
+    "commit": "7d770677e6604a69ce46589d8f9af4d41e539ba8",
+    "original_sha256": "de0b27b91c1de45d082abe9ac742ed962c929443c39a9f00d8d506036d8d2698",
+    "patch": "None. Aetherloom uses its scoped rendezvous and post-punch HMAC verification."
   }
 }

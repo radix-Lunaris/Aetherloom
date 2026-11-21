@@ -13,7 +13,7 @@ from .launcher import launch,offline_uuid,game_uuid
 from .network import Network,verify_host_listener
 from .world_lock import closed_world
 from .runtime import hidden_process
-from .environment import describe,validate,validate_account
+from .environment import describe,validate
 from .game_control import select_backend,agent_config,check_agent_package
 from .vanilla_control import CALAMUS_VANILLA_RELEASES,FABRIC_114_RELEASES,name_data_identity
 
@@ -79,7 +79,10 @@ class SharedSession:
             open_world = False
             if kwargs.get('quick_play'):
                 from .launcher import manifest, supports_quick_play
-                if not supports_quick_play(manifest(Path(b['root']), b['version'])):
+                environment = describe(b['root'], b['version'])
+                # Forge 52 can tick its world before loot modifiers load via Quick Play.
+                forge52 = (environment['minecraft'], environment['loader']) == ('1.21.1', 'forge')
+                if forge52 or not supports_quick_play(manifest(Path(b['root']), b['version'])):
                     kwargs.pop('quick_play')
                     open_world = True
             kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge, open_world=open_world))
@@ -90,7 +93,7 @@ class SharedSession:
 
     def control(self,*args,**kwargs):
         environment=describe(self.binding['root'],self.binding['version'])
-        return BridgeControl(*args,backend=self.backend,auth_mode='littleskin' if self.game_auth else 'offline',adapter=environment['minecraft']+'-'+environment['loader'],name_data=self.name_data,**kwargs)
+        return BridgeControl(*args,backend=self.backend,adapter=environment['minecraft']+'-'+environment['loader'],name_data=self.name_data,**kwargs)
 
     async def wait_for_historical_game_exit(self,version):
         if version not in CALAMUS_VANILLA_RELEASES | FABRIC_114_RELEASES:
@@ -163,7 +166,6 @@ class SharedSession:
             if not room:raise ValueError('共享房间不存在')
             self.state('preflight',host=room.get('host'),mode=room.get('mode','AUTO'),epoch=room.get('epoch'))
             validate(environment,room.get('environment'),backend=self.backend)
-            validate_account(self.binding,room.get('environment'))
             self.install_control(self.binding['run'])
             await asyncio.to_thread(self.api,base+'/join',{})
             head_info=await asyncio.to_thread(self.api,base+'/head')
@@ -173,10 +175,7 @@ class SharedSession:
                 if room['state']!='ready':raise ValueError('Host正在准备或上传，列表会自动更新，请稍后再在线启动')
                 self.state('connecting',role='Player',message='发现现有Host，正在建立本地代理')
                 identity=game_uuid(self.binding['name'],self.binding.get('uuid'))
-                # Old ECS versions restrict transport labels to ASCII. Verified
-                # external identities are matched by full UUID, never this label.
-                label='LS'+identity[:14] if self.game_auth else self.binding['name']
-                port=await self.network.listen(self.room,{'name':label,'uuid':identity})
+                port=await self.network.listen(self.room,{'name':self.binding['name'],'uuid':identity})
                 self.notify('status','已建立本地联机代理，正在启动加入游戏')
                 b=self.binding
                 jar=assets()/'aetherloom-bridge-0.1.1.jar'

@@ -86,7 +86,7 @@ minecraft_release,recommended_java,vanilla_launch_plan,fabric_quilt_exact_aliase
 1.20.5,21,pass,yes,exact-aliases,,,
 1.20.6,21,pass,yes,exact-aliases,,,
 1.21,21,pass,yes,exact-aliases,,,
-1.21.1,21,pass,yes,exact-aliases,,,NeoForge 21.1.264 (AQS); Fabric 0.20.1; Quilt 0.30.2
+1.21.1,21,pass,yes,exact-aliases,,,NeoForge 21.1.264 (AQS); Fabric 0.20.1; Quilt 0.30.2; Forge 52.1.16
 1.21.2,21,pass,yes,exact-aliases,,,
 1.21.3,21,pass,yes,exact-aliases,,,
 1.21.4,21,pass,yes,exact-aliases,,,

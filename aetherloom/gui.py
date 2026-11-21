@@ -17,7 +17,6 @@ from .launcher import launch, inside, game_uuid
 from . import __version__
 from .runtime import find_runtimes, required_java, choose_java, compatibility, inspect_java,launch_compatibility
 from .environment import describe, encode, validate
-from .environment import authentication,validate_account,decode
 from .game_accounts import GameAccounts
 from .network_status import probe_nat,human_bytes
 from .diagnostics import setup, logger, safe, event
@@ -273,8 +272,38 @@ class Window(ctk.CTk):
         self.world_hint=self.label(card,'仅检测当前运行目录的saves；游戏运行时暂停，不扫描区块文件。',12,MUTED,wraplength=650)
         self.world_hint.grid(row=2,column=0,sticky='w',padx=22,pady=8)
         self.button(card,'发布选中存档',lambda:self.create_room(world_path=self.world_choices.get(self.world_menu.get(),{}).get('path')),True,width=160).grid(row=3,column=0,sticky='e',padx=22,pady=(8,20))
+        self.button(card,'预览区块清理',self.preview_world_prune,width=145).grid(row=3,column=0,sticky='w',padx=22,pady=(8,20))
         self.world_choices={};self.world_generation=0;self.world_scan_key=None
         self.after(15000,self.auto_worlds)
+
+    def preview_world_prune(self):
+        if self.transfer_active or self.shared or self.launching or (self.process and self.process.poll() is None):
+            self.note('请先保存退出游戏并等当前同步完成',True);return
+        entry=self.world_choices.get(self.world_menu.get(),{})
+        if not entry.get('path'):return
+        world=Path(entry['path'])
+        raw=ctk.CTkInputDialog(title='预览区块清理',text='清理停留时间低于多少秒的区块？清理将生成独立副本。').get_input()
+        if raw is None:return
+        try:
+            seconds=float(raw)
+            if not 0<seconds<=300:raise ValueError()
+        except ValueError:
+            self.note('请填写大于 0 且不超过 300 的秒数',True);return
+        from .world_prune import clean_copy
+        def preview(plan):
+            if not plan:self.finish_transfer(True,'没有可安全清理的区块');return
+            if not messagebox.askyesno('确认生成清理副本',
+                    f'预计清理 {len(plan)} 个 region、实体或 POI 文件中的 {sum(len(v[0]) for v in plan.values())} 条记录。副本可从本地存档列表发布，原存档保留。',parent=self):
+                self.finish_transfer(True,'已取消区块清理');return
+            def complete(copy):
+                self.finish_transfer(True,'清理副本已生成：'+copy.name)
+                self.refresh_worlds()
+            self.task(lambda:clean_copy(world,seconds,plan),complete,failed)
+        def failed(error):
+            self.finish_transfer(False,error)
+            self.note(error,True)
+        self.begin_transfer('prune','正在扫描选定存档')
+        self.task(lambda:clean_copy(world,seconds),preview,failed)
 
     def auto_worlds(self):
         self.maybe_refresh_worlds();self.after(15000,self.auto_worlds)
@@ -717,7 +746,6 @@ class Window(ctk.CTk):
             if binding.get('game_account'):self.game_accounts.refresh(binding['game_account'],binding['name'],binding['uuid'])
             binding['java']=self.resolve_java(binding['root'],binding['version'],binding['java'],binding.get('java_mode','manual'))
             environment=describe(binding['root'],binding['version'])
-            if binding.get('game_account'):environment['authentication']='littleskin'
             if existing:
                 if existing.get('head'):raise ValueError('已有权威存档，请使用恢复候选审批，不能直接覆盖')
                 room=existing['id']
@@ -762,7 +790,6 @@ class Window(ctk.CTk):
             environment=describe(b['root'],b['version'])
             validate(environment,room.get('environment'),backend=select_backend(b))
             name_data_identity(b,environment['minecraft'])
-            validate_account(b,room.get('environment'))
         except (ValueError,OSError,KeyError) as e:self.note(str(e),True);return
         if not messagebox.askyesno('绑定共享房间',f"将当前本地版本 {b['version']} 绑定到房间 {room.get('name') or room['id']}？\n请确保版本、加载器和Mods与房间环境一致。\n作为Host时会将云端存档校验下载到专用世界目录。",parent=self):return
         target=Path(b['run'])/'saves'/('Aetherloom-'+room['id'])
@@ -783,19 +810,11 @@ class Window(ctk.CTk):
         self.label(dialog,room.get('name') or room['id'],19,bold=True).pack(anchor='w',padx=24,pady=(24,12))
         name=ctk.CTkEntry(dialog,height=40,fg_color=CARD,border_color=BORDER);name.insert(0,room.get('name') or room['id']);name.pack(fill='x',padx=24,pady=8)
         mode=ctk.CTkOptionMenu(dialog,values=['AUTO','RELAY','DIRECT'],fg_color=CARD,button_color=PRIMARY,height=38);mode.set(room.get('mode') or 'AUTO');mode.pack(fill='x',padx=24,pady=8)
-        login_mode=ctk.CTkOptionMenu(dialog,values=['离线游戏身份','LittleSkin外置登录'],fg_color=CARD,button_color=PRIMARY,height=38)
-        login_mode.set('LittleSkin外置登录' if authentication(room.get('environment'))=='littleskin' else '离线游戏身份');login_mode.pack(fill='x',padx=24,pady=8)
         def saved(_):dialog.destroy();self.rooms();self.note('房间配置已更新')
         def save_room():
             body={'name':name.get(),'mode':mode.get()}
-            selected='littleskin' if login_mode.get()=='LittleSkin外置登录' else 'offline'
-            if selected!=authentication(room.get('environment')):
-                if not messagebox.askyesno('变更游戏身份模式','必须先正常结束Host。所有成员需要使用对应账号类型并重新绑定；旧离线UUID与LittleSkin角色UUID可能不同，背包不会自动合并。确认转换？',parent=dialog):return
-                environment=decode(room.get('environment'))
-                if environment is None:self.note('请先补全房间游戏环境声明',True);return
-                environment['authentication']=selected;body['environment']=encode(environment)
             self.cloud_task('/api/rooms/'+room['id'],saved,body,method='PATCH')
-        self.button(dialog,'保存名称、连接和账号模式',save_room,True,width=240).pack(anchor='w',padx=24,pady=8)
+        self.button(dialog,'保存名称和连接模式',save_room,True,width=240).pack(anchor='w',padx=24,pady=8)
         self.button(dialog,'审阅并批准恢复候选',lambda:self.review_recovery(room),width=220).pack(anchor='w',padx=24,pady=8)
         if room['owner']==self.cloud_user or self.cloud_role=='root':
             owner=ctk.CTkOptionMenu(dialog,values=[room['owner']],height=38,fg_color=CARD,button_color=PRIMARY);owner.pack(fill='x',padx=24,pady=8)

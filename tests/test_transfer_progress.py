@@ -58,6 +58,9 @@ class ProgressTests(unittest.TestCase):
             self.assertEqual(requests,[])
             self.assertEqual((root/'checkout/level.dat').stat().st_mtime_ns,before)
             self.assertEqual([e['percent'] for e in events],sorted(e['percent'] for e in events))
+            events.clear()
+            CloudWorld(api,root/'cold-cache',on_progress=events.append).download('room',root/'checkout')
+            self.assertEqual(requests,[])
             corrupt=True;events.clear()
             with self.assertRaisesRegex(ValueError,'校验失败'):
                 CloudWorld(api,root/'bad-cache',on_progress=events.append).download('room',root/'bad-checkout')

@@ -8,7 +8,6 @@ import asyncio
 import secrets
 import time
 import uuid
-import re
 from dataclasses import dataclass, field
 from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from .vendor.craftlink.auto_stream import Decoder,Kind
@@ -65,10 +64,15 @@ class Relay:
             settings=c.execute('SELECT mode FROM room_settings WHERE room=?',(room,)).fetchone()
         mode=settings['mode'] if settings and settings['mode'] else 'AUTO'
         if identity is not None:
+            from .game_accounts import profile
             from .launcher import game_uuid
-            if not isinstance(identity,dict) or not re.fullmatch('[A-Za-z0-9_]{1,16}',str(identity.get('name',''))):
-                raise HTTPException(400,'游戏身份名称无效')
-            identity={'name':identity['name'],'uuid':game_uuid(identity['name'],identity.get('uuid'))}
+            try:
+                if not isinstance(identity,dict) or not isinstance(identity.get('name'),str):
+                    raise ValueError('Invalid peer identity')
+                player=profile({'name':identity['name'],'id':game_uuid(identity['name'],identity.get('uuid'))})
+            except (ValueError,TypeError,KeyError):
+                raise HTTPException(400,'游戏身份名称或 UUID 无效') from None
+            identity={'name':player['name'],'uuid':player['id']}
             for pair in self.pairs.values():
                 if pair.room!=room or pair.epoch!=r['epoch'] or not pair.identity:continue
                 if pair.player==actor and pair.identity!=identity:raise HTTPException(409,'当前会话不能变更游戏身份')
@@ -97,7 +101,7 @@ class Relay:
         if not self.rendezvous:return {'available':False}
         for key in p.punch_keys.values():self.rendezvous.register(key)
         opposite='player' if side=='host' else 'host'
-        return {'available':True,'peer':self.rendezvous.endpoint(p.punch_keys[opposite]),'port':self.rendezvous.socket.getsockname()[1]}
+        return {'available':True,'peer':self.rendezvous.endpoint(p.punch_keys[opposite]),'peer_nat':self.rendezvous.profile(p.punch_keys[opposite]),'port':self.rendezvous.socket.getsockname()[1]}
 
     def pending(self,room,user):
         self.collect();r=self.room(room)

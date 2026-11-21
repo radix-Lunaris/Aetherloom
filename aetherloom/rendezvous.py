@@ -1,5 +1,6 @@
 """Bounded UDP endpoint discovery; only HTTPS-issued capabilities get replies."""
 import json
+from .vendor.craftlink.nat_types import NatSub, Filter
 import socket
 import threading
 import time
@@ -18,13 +19,18 @@ class Rendezvous:
             now=time.monotonic()
             self.entries={k:v for k,v in self.entries.items() if v[0]>now}
             if key not in self.entries and len(self.entries)>=512:raise ValueError('P2P注册数量已满')
-            old=self.entries.get(key,(0,None))
-            self.entries[key]=(now+30,old[1])
+            old=self.entries.get(key,(0,None,None))
+            self.entries[key]=(now+30,old[1],old[2])
 
     def endpoint(self,key):
         with self.lock:
             entry=self.entries.get(key)
             return entry[1] if entry and entry[0]>time.monotonic() else None
+
+    def profile(self,key):
+        with self.lock:
+            entry=self.entries.get(key)
+            return entry[2] if entry and entry[0]>time.monotonic() else None
 
     def run(self):
         while not self.stopped.is_set():
@@ -36,7 +42,12 @@ class Rendezvous:
                 with self.lock:
                     entry=self.entries.get(key)
                     if not entry or entry[0]<time.monotonic():continue
-                    self.entries[key]=(entry[0],addr)
+                    raw=message.get('nat')
+                    profile=None
+                    if isinstance(raw,dict):
+                        profile={'type':NatSub(raw.get('type')).value,'filter':Filter(raw.get('filter')).value,
+                                 'per_ip_pool':raw.get('per_ip_pool') is True}
+                    self.entries[key]=(entry[0],addr,profile)
                 self.socket.sendto(json.dumps({'nonce':nonce,'observed':addr}).encode(),addr)
             except (socket.timeout,ValueError,TypeError,AttributeError):pass
             except OSError:

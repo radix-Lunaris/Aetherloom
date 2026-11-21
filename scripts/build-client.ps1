@@ -16,6 +16,8 @@ Copy-Item aetherloom/vendor/asm/*.txt -Destination $licensesRoot
 Copy-Item aetherloom/vendor/asm/SOURCE.json -Destination (Join-Path $licensesRoot 'ASM-SOURCE.json')
 Copy-Item agent/resources/MAPPINGS-NOTICE.txt -Destination $licensesRoot
 Copy-Item playerdata/LICENSE.shared-playerdata -Destination $licensesRoot
+Copy-Item aetherloom/vendor/mcsync/SOURCE.json -Destination (Join-Path $licensesRoot 'MCSync-SOURCE.json')
+Copy-Item aetherloom/vendor/mcsync/LICENSE -Destination (Join-Path $licensesRoot 'MCSync-LICENSE.txt')
 Copy-Item aetherloom/vendor/craftlink/SOURCE.json -Destination (Join-Path $licensesRoot 'CraftLink-SOURCE.json')
 Copy-Item bridge/SOURCE.json -Destination (Join-Path $licensesRoot 'Aetherloom-Bridge-SOURCE.json')
 foreach ($package in @('customtkinter-5.2.2.dist-info','websockets-15.0.1.dist-info','pillow-13.0.0.dist-info')) {

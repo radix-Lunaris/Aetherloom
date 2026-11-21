@@ -2,7 +2,7 @@ import io,json,os,tempfile,unittest,uuid
 from pathlib import Path
 from types import SimpleNamespace
 from aetherloom.game_accounts import GameAccounts,GameAuth,dpapi,ISSUER,profile
-from aetherloom.environment import encode,decode,authentication,validate_account
+from aetherloom.environment import encode,decode,authentication
 from aetherloom.process_log import collect
 
 ID='81f14300fbc14a4688f00d90db478198'
@@ -55,9 +55,6 @@ class AccountTests(unittest.TestCase):
         environment={'minecraft':'1.20.1','loader':'forge','loader_version':'47.4.22'}
         external=encode(dict(environment,authentication='littleskin'))
         self.assertEqual(decode(external),environment);self.assertEqual(authentication(external),'littleskin')
-        with self.assertRaises(ValueError):validate_account({},external)
-        validate_account({'game_account':'saved-account'},external)
-        with self.assertRaises(ValueError):validate_account({'game_account':'saved-account'},encode(environment))
         self.assertEqual(authentication('1.20.1 Forge47.4.22'),'offline')
 
     def test_game_output_redaction_across_chunks(self):

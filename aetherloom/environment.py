@@ -60,11 +60,6 @@ def authentication(value):
     return result
 
 
-def validate_account(binding,remote):
-    local='littleskin' if binding.get('game_account') else 'offline'
-    if local!=authentication(remote):raise ValueError('游戏账号类型与房间不一致；LittleSkin房间需选择LittleSkin角色，离线房间请使用离线身份')
-
-
 def loader_family(environment):
     version=environment['loader_version']
     if environment['loader']=='forge':return str(version).split('.')[0]
