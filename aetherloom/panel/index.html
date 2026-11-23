@@ -2,13 +2,14 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aetherloom · 控制中心</title>
+<link rel="icon" href="mark.png"><title>Aetherloom · 控制中心</title>
 <link rel="stylesheet" href="panel.css"><script src="panel.js" defer></script>
 </head>
 <body>
+<button id="appearance" type="button" aria-label="切换界面主题"></button>
 <div id="login-section" class="login-shell">
   <section class="login-story">
-    <a class="brand" href="./"><span class="brand-mark">A</span>Aetherloom</a>
+    <a class="brand" href="./"><img class="brand-mark" src="mark.png" alt="">Aetherloom</a>
     <div class="story-body">
       <p class="eyebrow">YOUR WORLD, TOGETHER.</p>
       <h1>共同世界。<br>从这里开始。</h1>
@@ -30,17 +31,19 @@
       </form>
       <p class="login-help">这是 Aetherloom 软件账号，与你的 Minecraft 离线身份无关。</p>
     </div>
-    <footer>Aetherloom <span>0.4.0a15</span></footer>
+    <footer>Aetherloom <span>0.4.0a16</span></footer>
   </section>
 </div>
 
 <div id="workspace" class="app-shell" hidden>
   <aside class="sidebar">
-    <a class="brand" href="./"><span class="brand-mark">A</span>Aetherloom</a>
+    <a class="brand" href="./"><img class="brand-mark" src="mark.png" alt="">Aetherloom</a>
     <p class="nav-caption">控制中心</p>
     <nav aria-label="主导航">
       <button type="button" class="nav-item active" data-view="overview"><span aria-hidden="true">◈</span>服务器概况</button>
       <button type="button" class="nav-item" data-view="instances"><span aria-hidden="true">▦</span>共享房间</button>
+      <button type="button" class="nav-item" data-view="streams">会话流</button>
+      <button type="button" class="nav-item" data-view="settings" hidden>面板设置</button>
       <button type="button" class="nav-item" data-view="accounts"><span aria-hidden="true">◎</span>账号管理</button>
     </nav>
     <div class="sidebar-bottom"><div class="profile"><div class="avatar">A</div><div><strong id="actor">管理员</strong><span id="actor-role">服务器账号</span></div></div><button type="button" id="logout" class="logout">退出登录 <span>↗</span></button></div>
@@ -55,7 +58,7 @@
         <section class="surface resource-card"><div class="section-heading"><h2>资源状态</h2><span class="tiny-label">实时快照</span></div><div class="resource-line"><span>磁盘使用</span><strong id="disk-label">—</strong></div><progress id="disk-progress" max="100" value="0"></progress><div class="resource-line"><span>物理内存使用</span><strong id="memory-label">—</strong></div><progress id="memory-progress" max="100" value="0"></progress><div class="resource-bottom"><span>CPU 核心 <strong id="cpu-count">—</strong></span><span>系统负载 <strong id="load-average">—</strong></span></div><p class="resource-note">内存为宿主机指标；负载为最近 1 分钟平均值。</p></section>
         <section class="surface service-card"><div class="section-heading"><h2>服务信息</h2><span class="status-tag">运行中</span></div><dl><div><dt>控制服务</dt><dd>Aetherloom API</dd></div><div><dt>版本</dt><dd id="service-version">—</dd></div><div><dt>连接方式</dt><dd>HTTPS</dd></div><div><dt>最后刷新</dt><dd id="updated">—</dd></div></dl></section>
       </div>
-      <div class="release-note"><span class="release-icon">i</span><div><strong>版本 0.4.0a15</strong><p>修复在线启动与 LittleSkin 房间限制，并同步打洞和存档功能。</p></div></div>
+      <div class="release-note"><span class="release-icon">i</span><div><strong>版本 0.4.0a16</strong><p>新增角色配置、房间模组校验、会话流和面板入口设置。</p></div></div>
     </section>
 
     <section id="view-instances" class="view" hidden>
@@ -63,6 +66,20 @@
       <section class="surface table-surface"><div class="section-heading"><h2>共享房间</h2><span class="tiny-label">房间管理</span></div><div class="table-wrap"><table><thead><tr><th>共享房间</th><th>游戏环境</th><th>所有者</th><th>当前 Host</th><th>状态</th><th>代次</th><th>操作</th></tr></thead><tbody id="rooms"></tbody></table></div></section>
     </section>
 
+    <section id="view-streams" class="view" hidden><div class="page-heading"><h1>会话流</h1></div>
+      <input id="stream-filter" placeholder="筛选房间、玩家、路径或阶段" aria-label="筛选会话流">
+      <div class="surface table-surface"><table><thead><tr><th>房间</th><th>Host</th><th>玩家</th><th>代次</th><th>通道</th><th>实际路径</th><th>操作</th></tr></thead><tbody id="streams"></tbody></table></div></section>
+    <section id="view-settings" class="view" hidden><div class="page-heading"><h1>面板设置</h1></div>
+    <form id="panel-entry" class="surface create-card">
+      <label for="panel-address">监听地址</label><input id="panel-address" required>
+      <label for="panel-domain">HTTPS 域名</label><input id="panel-domain" required>
+      <label for="panel-port">监听端口</label><input type="number" min="1024" max="65535" id="panel-port" required>
+      <label for="panel-path">安全路径</label><input id="panel-path" pattern="[a-zA-Z0-9]{16}" maxlength="16" required>
+      <label for="panel-icp">ICP备案号</label><input id="panel-icp" maxlength="80">
+      <button class="primary" type="submit">试用新设置</button>
+    </form><p id="panel-pending"></p><button type="button" class="secondary" id="confirm-entry" hidden>从当前入口确认</button>
+    <form id="panel-grants" class="surface create-card" hidden><h2>页面授权</h2><label for="grant-account">软件账号</label><select id="grant-account"></select>
+    <label for="grant-level">权限</label><select id="grant-level"><option value="none">不可见</option><option value="view">仅查看</option><option value="edit">可修改</option></select><button class="primary">保存授权</button></form></section>
     <section id="view-accounts" class="view" hidden>
       <div class="page-heading"><div><p class="eyebrow">ACCOUNTS</p><h1>账号管理</h1><p class="muted">为朋友创建独立的软件账号。</p></div><span class="count-badge" id="account-count">0 个账号</span></div>
       <div class="accounts-grid">
@@ -70,7 +87,7 @@
         <section class="surface create-card"><h2>创建账号</h2><p class="muted">密码通过安全渠道交给使用者。</p><form id="create-user"><label for="new-name">账号名称</label><input id="new-name" placeholder="1至32位，不包含空白" required minlength="1" maxlength="32" autocomplete="off"><label for="new-password">初始密码</label><input id="new-password" type="password" placeholder="至少 6 位" required minlength="6" maxlength="1024" autocomplete="new-password"><label for="new-role">服务器角色</label><select id="new-role"><option value="player">Player · 普通账号</option><option id="admin-option" value="admin">Admin · 服务器管理员</option></select><button class="primary" type="submit">创建账号 <span>+</span></button></form><p class="permission-note">实例所有者、实例管理员和 Host 为独立身份，不由服务器角色直接替代。</p></section>
       </div>
     </section>
-    <footer class="workspace-footer">Aetherloom <span>你的世界，由你掌握。</span></footer>
+    <footer class="workspace-footer">Aetherloom <span><a id="icp-footer" href="https://beian.miit.gov.cn/" rel="noopener"></a></span></footer>
   </main>
 </div>
 <div id="message" class="toast" role="status" aria-live="polite" hidden></div>

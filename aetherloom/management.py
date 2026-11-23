@@ -72,7 +72,7 @@ def edit_account(store, actor, target, body, delete=False):
                 raise HTTPException(409, '请先转移或删除该账号拥有的共享房间，避免存档失去所有者')
             if c.execute('SELECT 1 FROM rooms WHERE host=? AND expires>?', (target,time.time())).fetchone():
                 raise HTTPException(409, '该账号正在托管，请先保存并结束会话')
-            for table, column in (('sessions','actor'),('members','actor'),('managers','actor'),('recovery_uploads','actor'),('account_settings','name'),('accounts','name')):
+            for table, column in (('panel_grants','actor'),('sessions','actor'),('members','actor'),('managers','actor'),('recovery_uploads','actor'),('account_settings','name'),('accounts','name')):
                 c.execute(f'DELETE FROM {table} WHERE {column}=?', (target,))
             audit(c,actor['name'],'delete_user',target)
             return {'ok':True}
@@ -94,7 +94,7 @@ def edit_account(store, actor, target, body, delete=False):
             valid_name(name)
             if c.execute('SELECT 1 FROM accounts WHERE name=?',(name,)).fetchone():
                 raise HTTPException(409,'账号名称已存在')
-            for table,column in (('accounts','name'),('account_settings','name'),('sessions','actor'),('rooms','owner'),('rooms','host'),('managers','actor'),('members','actor'),('versions','actor'),('recovery_uploads','actor')):
+            for table,column in (('panel_grants','actor'),('accounts','name'),('account_settings','name'),('sessions','actor'),('rooms','owner'),('rooms','host'),('managers','actor'),('members','actor'),('versions','actor'),('recovery_uploads','actor')):
                 c.execute(f'UPDATE {table} SET {column}=? WHERE {column}=?',(name,target))
         audit(c,actor['name'],'edit_user',target,{'fields':list(body),'new_name':name})
         return {'ok':True,'username':name}

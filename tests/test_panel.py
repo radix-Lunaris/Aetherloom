@@ -28,5 +28,13 @@ class PanelTests(unittest.TestCase):
                 result=c.get('/api/users',headers={'Authorization':'Bearer '+r['token']})
                 self.assertEqual(result.status_code,200)
                 self.assertEqual(set(result.json()[0]),{'name','role','disabled'})
+                player={"Authorization":"Bearer "+p["token"]}
+                root={"Authorization":"Bearer "+r["token"]}
+                self.assertEqual(c.get("/api/panel/settings",headers=player).status_code,403)
+                for level in ("view","edit","none"):
+                    self.assertEqual(c.put("/api/panel/grants/player",headers=root,json={"access":level}).status_code,200)
+                    self.assertEqual(c.get("/api/panel/access",headers=player).json()["access"],None if level=="none" else level)
+                    self.assertEqual(c.put("/api/panel/grants/player",headers=player,json={"access":"edit"}).status_code,403)
+                    self.assertEqual(c.get("/api/users",headers=player).status_code,403)
                 for _ in range(10):self.assertEqual(c.post('/api/login',json={'username':'nobody','password':'wrong'}).status_code,401)
                 self.assertEqual(c.post('/api/login',json={'username':'nobody','password':'wrong'}).status_code,429)

@@ -74,3 +74,7 @@ python -m pip download --only-binary=:all: --platform manylinux_2_28_x86_64 --pl
 ## 双端口 STUN（0.4.0a7）
 
 Compose 使用同一应用镜像运行独立 `stun` 服务，内存上限 64 MiB，不连接 MySQL，不挂载存档卷。除原有 HTTPS 和 UDP 52861 外，主机防火墙及云安全组须允许入站 UDP 52718、52719。更新时先备份 SQL、存档卷及配置，确认无活动 Host，再运行 `docker compose up -d --no-deps --no-build --wait control` 和 `docker compose up -d --no-deps --no-build stun`。保留独立 MySQL 容器及既有 HTTPS 配置。`/health` 广告 STUN 端口，客户端优先将此双端口用于真实过滤测试；仅容器启动成功不能证明公网 UDP 已放行。
+
+## v0.4.0a16 面板入口服务
+
+升级时保留既有 .env、数据卷和 Nginx 配置。容器使用本机 /run/aetherloom-panel 下的 Unix socket，请先安装宿主机服务。将 server/panel_agent.py 和 aetherloom/panel_entry.py 分别安装到 /opt/aetherloom/panel-agent/server 和 /opt/aetherloom/panel-agent/aetherloom，目录及脚本归 root。将 server/aetherloom-panel.service 安装到 /etc/systemd/system，执行 systemctl daemon-reload 和 systemctl enable --now aetherloom-panel。首次启动会导入 /etc/nginx/sites-available/aetherloom-https 的现有入口并在私有目录 /var/lib/aetherloom-panel 持久化设置。改域名前先准备 DNS 和对应的有效证书，端口需在云安全组放行。试运行后从新入口登录确认，超时 180 秒回退。应用 UDP 使用 47192/udp，需配合 Docker、主机防火墙和云安全组；原有 TCP HTTPS 和 STUN 继续使用各自的端口。

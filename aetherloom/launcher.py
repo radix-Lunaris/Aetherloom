@@ -107,7 +107,7 @@ def game_uuid(name, custom_uuid=None):
         raise LaunchError('UUID 格式无效：请填写32位十六进制或带连字符的标准UUID；不能全部为零') from None
 
 
-def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=None,game_auth=None):
+def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=None,game_auth=None,options=None):
     root, java = Path(root).resolve(), Path(java).resolve()
     run = Path(run_dir or root).resolve()
     if not root.is_dir() or not run.is_dir():
@@ -229,6 +229,33 @@ def prepare(root, version, java, name, run_dir=None, memory=2048, custom_uuid=No
         jvm += ["-cp", os.pathsep.join(cp)]
     if not any(x.startswith("-Djava.library.path=") for x in jvm):
         jvm += ["-Djava.library.path=" + java_path(native_dir)]
+    options=options or {}
+    def number(key,low,high):
+        raw=options.get(key)
+        if not raw:
+            return None
+        if not str(raw).isdecimal() or not low<=int(raw)<=high:
+            raise LaunchError(f"{key} 参数超出范围 {low}–{high}")
+        return int(raw)
+    initial=number("initial_heap",1,memory)
+    import shlex
+    additional=shlex.split(options.get("extra_jvm",""))
+    if any(not arg.startswith("-") or arg.startswith(("-Xmx","-Xms","-javaagent","-agent","-cp","-classpath","--class-path","-jar")) for arg in additional):
+        raise LaunchError("额外 JVM 参数与启动配置冲突或格式无效")
+    for key,flag in (("window_width","--width"),("window_height","--height")):
+        size=number(key,1,32768)
+        if size:
+            if flag in game:
+                index=game.index(flag)
+                game[index:index+2]=[flag,str(size)]
+            else:
+                game.extend([flag,str(size)])
+    if options.get("fullscreen")=="1" and "--fullscreen" not in game:
+        game.append("--fullscreen")
+    if initial:
+        jvm=[arg for arg in jvm if not arg.startswith("-Xms")]
+        jvm.append(f"-Xms{initial}M")
+    jvm=[arg for arg in jvm if not arg.startswith("-Xmx")]+additional
     for archive, excludes in natives:
         with zipfile.ZipFile(archive) as z:
             for entry in z.infolist():

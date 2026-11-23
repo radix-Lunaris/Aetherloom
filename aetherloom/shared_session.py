@@ -87,7 +87,7 @@ class SharedSession:
                     open_world = True
             kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge, open_world=open_world))
         if self.game_auth:kwargs.update(game_auth=self.game_auth,authlib_jar=assets()/'authlib-injector.jar')
-        process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),custom_uuid=b.get('uuid'),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
+        process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),options=b,custom_uuid=b.get('uuid'),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
         self.process=process;self.notify('process',process)
         return process
 
@@ -166,6 +166,8 @@ class SharedSession:
             if not room:raise ValueError('共享房间不存在')
             self.state('preflight',host=room.get('host'),mode=room.get('mode','AUTO'),epoch=room.get('epoch'))
             validate(environment,room.get('environment'),backend=self.backend)
+            from .modpack import verify_pack
+            await asyncio.to_thread(verify_pack,self.binding['run'],environment,room.get('environment'),room.get('required_mods'))
             self.install_control(self.binding['run'])
             await asyncio.to_thread(self.api,base+'/join',{})
             head_info=await asyncio.to_thread(self.api,base+'/head')

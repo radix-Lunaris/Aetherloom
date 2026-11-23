@@ -12,6 +12,7 @@ server {
  location = /api/login { limit_req zone=aetherloom_login burst=5 nodelay; limit_req_status 429; proxy_pass http://127.0.0.1:8765; }
  location = /api/users { return 404; }
  location ^~ /api/users/ { return 404; }
+ location ^~ /api/panel/ { return 404; }
  location = /api/audit { return 404; }
  location = /api/relay {
   proxy_pass http://127.0.0.1:8765;

@@ -29,3 +29,5 @@ ASM 9.8 来自官方 Maven Central，采用 BSD 3-Clause。许可证和哈希位
 
 
 MCSync 区块与 NBT 处理来自 b31d0f9，原许可证及来源信息位于 aetherloom/vendor/mcsync。CraftLink punch.py 来自 7d77067，逐文件来源见对应 SOURCE.json。上游许可证版本保留。
+
+应用 UDP 转发、UdpHub 应用数据报分流及 UDP 中继基于 CraftLink dev 1fd395671474d15f1f24a4404699befb3c4c4754，使用 Aetherloom HTTPS 账号、会话代次和短期端点授权。

@@ -13,6 +13,7 @@ services:
       AETHERLOOM_MYSQL_DATABASE: aetherloom
       AETHERLOOM_MYSQL_USER: aetherloom
       AETHERLOOM_MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}"
+      AETHERLOOM_DATAGRAM_BIND: "0.0.0.0:47192"
       AETHERLOOM_P2P_BIND: "0.0.0.0:52861"
       AETHERLOOM_STUN_ENABLED: "1"
       AETHERLOOM_STUN_PORT: "52718"
@@ -23,8 +24,10 @@ services:
     ports:
       - "${AETHERLOOM_BIND:-127.0.0.1}:8765:8765"
       - "52861:52861/udp"
+      - "47192:47192/udp"
     volumes:
       - aetherloom-data:/data
+      - /run/aetherloom-panel:/run/aetherloom-panel:ro
     mem_limit: 512m
     cpus: 1.0
     security_opt:

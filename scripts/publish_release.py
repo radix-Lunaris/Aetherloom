@@ -13,8 +13,8 @@ repo='radix-Lunaris/Aetherloom'
 parser=argparse.ArgumentParser();parser.add_argument('action',choices=['verify','stage','publish']);parser.add_argument('--branch',choices=['dev','experiment/java-agent'],default='dev')
 args=parser.parse_args()
 version=tomllib.loads((root/'pyproject.toml').read_text())['project']['version']
-experimental=args.branch=='experiment/java-agent'
-if experimental != bool(re.search(r'(?:a|b|rc)\d+$',version)):raise SystemExit('Experimental branch and prerelease version must match')
+experimental=bool(re.search(r'(?:a|b|rc)\d+$',version))
+if args.branch=='experiment/java-agent' and not experimental:raise SystemExit('Experimental branch and prerelease version must match')
 tag='v'+version
 expected=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
 if subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip():

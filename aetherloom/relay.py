@@ -28,6 +28,8 @@ class Pair:
     punch_keys: dict = field(default_factory=lambda: {s:secrets.token_urlsafe(32) for s in ('host','player')})
     shared: str = field(default_factory=lambda:secrets.token_hex(32))
     mode: str = 'AUTO'
+    reports: dict = field(default_factory=dict)
+    revoked: bool = False
     identity: dict | None = None
 
 
@@ -106,7 +108,7 @@ class Relay:
     def pending(self,room,user):
         self.collect();r=self.room(room)
         if r['host']!=user:raise HTTPException(403,'需要当前Host身份')
-        return [self.info(p,'host') for p in self.pairs.values() if p.room==room and p.epoch==r['epoch'] and p.host==user]
+        return [self.info(p,'host') for p in self.pairs.values() if p.room==room and p.epoch==r['epoch'] and p.host==user and not p.revoked]
 
     async def websocket(self,ws:WebSocket):
         await ws.accept()
@@ -115,7 +117,7 @@ class Relay:
             hello=await asyncio.wait_for(ws.receive_json(),10)
             user=await asyncio.to_thread(self.authenticate,'Bearer '+hello.get('token',''))
             p=self.pairs.get(hello.get('sid'));side=hello.get('side')
-            if not p or side not in ('host','player'):raise ValueError('Invalid stream')
+            if not p or p.revoked or side not in ('host','player'):raise ValueError('Invalid stream')
             if self.authorize:await asyncio.to_thread(self.authorize,p.room,user)
             r=await asyncio.to_thread(self.room,p.room)
             if r['epoch']!=p.epoch or r['host']!=p.host or user['name']!=getattr(p,side) or not secrets.compare_digest(p.secrets[side],hello.get('resume','')):

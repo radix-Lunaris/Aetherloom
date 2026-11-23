@@ -38,6 +38,6 @@ $buildInfo = @{ version = $version; source_commit = $sourceCommit; built_utc = [
 $infoPath = Join-Path $scratchRoot 'BUILD_INFO.json'
 [IO.File]::WriteAllText($infoPath, ($buildInfo | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 $assetsRoot = Join-Path $projectRoot 'assets'
-& ./.venv/Scripts/python.exe -m PyInstaller --noconfirm --windowed --onefile --name Aetherloom --distpath $releaseRoot --workpath (Join-Path $scratchRoot 'pyinstaller') --specpath $scratchRoot --collect-all customtkinter --exclude-module PySide6 --exclude-module PyQt6 --add-data "$assetsRoot;assets" --add-data "$licensesRoot;licenses" --add-data "$infoPath;." (Join-Path $projectRoot 'desktop.py')
+& ./.venv/Scripts/python.exe -m PyInstaller --noconfirm --windowed --onefile --name Aetherloom --icon (Join-Path $projectRoot "aetherloom/panel/mark.ico") --add-data "$(Join-Path $projectRoot 'aetherloom/panel/mark.ico');aetherloom/panel" --distpath $releaseRoot --workpath (Join-Path $scratchRoot 'pyinstaller') --specpath $scratchRoot --collect-all customtkinter --exclude-module PySide6 --exclude-module PyQt6 --add-data "$assetsRoot;assets" --add-data "$licensesRoot;licenses" --add-data "$infoPath;." (Join-Path $projectRoot 'desktop.py')
 if ($LASTEXITCODE -ne 0) { throw 'Client build failed; previous outputs and diagnostics retained' }
 Write-Output (Join-Path $releaseRoot 'Aetherloom.exe')

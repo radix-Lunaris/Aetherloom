@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory() as d,patch('aetherloom.gui.probe_nat',return_
     window=Window(root/'settings');window.withdraw()
     try:
         assert window.bindings['legacy']['java_mode']=='auto'
-        assert window.values['control_backend'].get()=='bridge'
+        assert window.values['control_backend'].get()=='agent'
         window.values['root'].set(str(root/'game'))
         window.values['java'].set(str(root/'java.exe'))
         window.values['name'].set('OfflinePlayer')

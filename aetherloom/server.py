@@ -44,6 +44,7 @@ class RoomInput(BaseModel):
     name: str = Field(default='共享世界', min_length=1, max_length=80)
     environment: str = Field(default='1.20.1 Forge 47.4.22', max_length=200)
     world: str = Field(default='', max_length=200)
+    required_mods: dict[str,tuple[str,str]] | None = Field(default=None,max_length=4096)
 
 class MemberInput(BaseModel):
     username: str
@@ -53,6 +54,9 @@ def create_app(data_dir=None):
     store = Authority(Path(data_dir or os.environ.get("AETHERLOOM_DATA", "./data")))
     with store.connect() as c:
         c.executescript("""
+CREATE TABLE IF NOT EXISTS panel_grants(actor TEXT PRIMARY KEY,access_level TEXT);
+CREATE TABLE IF NOT EXISTS room_optional_mods(room TEXT PRIMARY KEY,manifest TEXT);
+CREATE TABLE IF NOT EXISTS room_modpacks(room TEXT PRIMARY KEY, manifest TEXT);
 CREATE TABLE IF NOT EXISTS accounts(name TEXT PRIMARY KEY, salt TEXT, digest TEXT, role TEXT);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires REAL);
 """)
@@ -63,8 +67,15 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         if bind:
             from .rendezvous import Rendezvous
             relay.rendezvous=Rendezvous(bind)
+        udp_transport=None
+        udp_bind=os.environ.get("AETHERLOOM_DATAGRAM_BIND")
+        if udp_bind:
+            from .datagram_relay import DatagramRelay
+            host,port=udp_bind.rsplit(":",1)
+            udp_transport,relay.datagrams=await asyncio.get_running_loop().create_datagram_endpoint(DatagramRelay,local_addr=(host,int(port)))
         try:yield
         finally:
+            if udp_transport:udp_transport.close()
             if relay.rendezvous:relay.rendezvous.close()
     app = FastAPI(title="Aetherloom", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,lifespan=lifespan)
     app.state.store = store
@@ -89,6 +100,9 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         @app.get('/panel.js')
         def panel_js():
             return FileResponse(static/'panel.js', media_type='application/javascript')
+        @app.get('/mark.png')
+        def panel_mark():
+            return FileResponse(static/'mark.png',media_type='image/png')
         @app.get('/panel.css')
         def panel_css():
             return FileResponse(static/'panel.css', media_type='text/css')
@@ -102,6 +116,10 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         if not row:
             raise HTTPException(401,"请先登录 Aetherloom")
         return dict(row)
+
+    if os.environ.get("AETHERLOOM_PANEL")=="1":
+        from . import panel_settings
+        panel_settings.install(app,store,authenticate,audit)
 
     def manager(room, user):
         with store.connect() as c:
@@ -276,8 +294,14 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
     def rooms(user=Depends(authenticate)):
         with store.connect() as c:
             rows=c.execute("SELECT r.id,r.owner,r.epoch,r.head,r.host,r.expires,r.state,COALESCE(s.name,r.id) AS name,s.environment,s.world,s.mode FROM rooms r LEFT JOIN room_settings s ON s.room=r.id").fetchall()
+            optional={row["room"]:set(json.loads(row["manifest"])) for row in c.execute("SELECT room,manifest FROM room_optional_mods").fetchall()}
+            packs={row["room"]:json.loads(row["manifest"]) for row in c.execute("SELECT room,manifest FROM room_modpacks").fetchall()}
             managed={r['room'] for r in c.execute('SELECT room FROM managers WHERE actor=?',(user['name'],)).fetchall()}
         result=[dict(r) for r in rows]
+        for room in result:
+            if room["id"] in packs:
+                room["required_mods"]={k:v for k,v in packs[room["id"]].items() if k not in optional.get(room["id"],())}
+                room["optional_mods"]=sorted(optional.get(room["id"],()))
         for r in result:r['can_manage']=user['role']=='root' or r['owner']==user['name'] or r['id'] in managed
         return result
 
@@ -295,6 +319,68 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
                 raise HTTPException(403,'仅Owner或root可选择账号管理成员与所有权')
             return [dict(row) for row in c.execute('SELECT a.name FROM accounts a LEFT JOIN account_settings s ON s.name=a.name WHERE COALESCE(s.disabled,0)=0 ORDER BY a.name').fetchall()]
 
+    @app.post('/api/connections/{sid}/report')
+    async def report_stream(sid:str,body:dict,user=Depends(authenticate)):
+        pair=relay.pairs.get(sid)
+        if not pair:return {"closed":True}
+        participant(pair.room,user)
+        if user["name"] not in (pair.host,pair.player):
+            raise HTTPException(403,"不是此连接的成员")
+        room=relay.room(pair.room)
+        if body.get("epoch")!=pair.epoch or room["epoch"]!=pair.epoch or pair.revoked:return {"closed":True}
+        state={k:v for k,v in body.items() if k in ("active_path","switch_phase","direct_rtt_ms","relay_rtt_ms") and type(v) in (str,int,float) and len(str(v))<=64}
+        pair.reports[user["name"]]={**state,"time":time.time()}
+        pair.touched=time.monotonic()
+        return {"closed":False}
+
+    @app.delete('/api/rooms/{room}/streams/{epoch}/{sid}')
+    async def disconnect_stream(room:str,epoch:int,sid:str,user=Depends(authenticate)):
+        manager(room,user)
+        pair=relay.pairs.get(sid)
+        if not pair or pair.room!=room or pair.channel!="data" or pair.epoch!=epoch or relay.room(room)["epoch"]!=epoch:
+            raise HTTPException(409,"流已结束或代次已变化")
+        pair.revoked=True
+        for ws in list(pair.ends.values()):
+            try:await ws.close(code=1000)
+            except RuntimeError:pass
+        with store.connect() as c:audit(c,user["name"],"disconnect_stream",room,{"sid":sid,"epoch":epoch})
+        return {"ok":True}
+
+    @app.put('/api/rooms/{room}/required-mods')
+    def update_required_mods(room:str,body:dict,user=Depends(authenticate)):
+        manager(room,user)
+        required=body.get("required")
+        if not isinstance(required,list) or len(required)>4096 or not all(isinstance(key,str) for key in required):
+            raise HTTPException(400,"模组选择无效")
+        with store.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            active=c.execute("SELECT host,expires,owner FROM rooms WHERE id=?",(room,)).fetchone()
+            if not active:raise HTTPException(404,"房间不存在")
+            if user["role"]!="root" and active["owner"]!=user["name"] and not c.execute("SELECT 1 FROM managers WHERE room=? AND actor=?",(room,user["name"])).fetchone():
+                raise HTTPException(403,"房间管理权限已撤销")
+            if active["host"] and active["expires"]>time.time():raise Conflict("请在结束托管后调整模组")
+            row=c.execute("SELECT manifest FROM room_modpacks WHERE room=?",(room,)).fetchone()
+            if not row:raise HTTPException(409,"此房间尚未登记模组清单")
+            catalog=json.loads(row["manifest"])
+            if set(required)-catalog.keys():raise HTTPException(400,"包含未登记的模组")
+            c.execute("DELETE FROM room_optional_mods WHERE room=?",(room,))
+            c.execute("INSERT INTO room_optional_mods(room,manifest) VALUES (?,?)",(room,json.dumps(sorted(catalog.keys()-set(required)))))
+            audit(c,user["name"],"edit_required_mods",room,{"count":len(required)})
+        return {"ok":True}
+
+    @app.get('/api/connections/{sid}/datagrams')
+    async def udp_grant(sid:str,user=Depends(authenticate)):
+        pair=relay.pairs.get(sid)
+        if not pair or pair.channel!="network" or not getattr(relay,"datagrams",None):
+            raise HTTPException(404,"UDP 服务不可用")
+        participant(pair.room,user)
+        room=relay.room(pair.room)
+        if room["epoch"]!=pair.epoch or room["host"]!=pair.host:
+            raise HTTPException(409,"Host 已变更")
+        if user["name"] not in (pair.host,pair.player):
+            raise HTTPException(403,"没有此连接的权限")
+        return relay.datagrams.grant(sid,0 if user["name"]==pair.host else 1)
+
     @app.get('/api/rooms/{room}/diagnostics')
     async def connection_diagnostics(room:str,user=Depends(authenticate)):
         manager(room,user)
@@ -303,7 +389,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         # Server can observe relay attachments, not whether clients use P2P.
         return {'room':room,'host':r['host'],'epoch':r['epoch'],'state':r['state'],
                 'streams':[{'id':p.sid,'player':p.player,'channel':p.channel,'mode':p.mode,
-                            'host_attached':'host' in p.ends,'player_attached':'player' in p.ends,
+                            'reports':{actor:state for actor,state in p.reports.items() if time.time()-state['time']<15},'closed':p.revoked,'host_attached':'host' in p.ends,'player_attached':'player' in p.ends,
                             'path':'服务器仅观测中继承载；P2P 状态见客户端'}
                            for p in relay.pairs.values() if p.room==room and p.epoch==r['epoch']]}
 
@@ -315,6 +401,8 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         room=store.create(user['name'])
         with store.connect() as c:
             c.execute('INSERT INTO room_settings(room,name,environment,world,mode) VALUES (?,?,?,?,?)',(room,body.name,body.environment,body.world,'AUTO'))
+            if body.required_mods is not None:
+                c.execute('INSERT INTO room_modpacks(room,manifest) VALUES (?,?)',(room,json.dumps(body.required_mods)))
             c.execute('INSERT INTO members VALUES (?,?)',(room,user['name']))
             audit(c,user['name'],'create_room',room,body.model_dump())
         return {"id":room}
@@ -354,7 +442,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
             if user['role']!='root' and r['owner']!=user['name'] and not c.execute('SELECT 1 FROM managers WHERE room=? AND actor=?',(room,user['name'])).fetchone():raise HTTPException(403,'实例管理权限已变化')
             if r['token'] and r['expires']>time.time():raise Conflict('房间正在托管，需先正常保存退出')
             # Immutable versions/blobs remain available to server backup/recovery.
-            for table,column in (('members','room'),('managers','room'),('room_settings','room'),('rooms','id')):
+            for table,column in (('room_optional_mods','room'),('room_modpacks','room'),('members','room'),('managers','room'),('room_settings','room'),('rooms','id')):
                 c.execute(f'DELETE FROM {table} WHERE {column}=?',(room,))
             audit(c,user['name'],'delete_room',room,{'head':r['head'],'state':r['state'],'epoch':r['epoch']})
         return {'ok':True}

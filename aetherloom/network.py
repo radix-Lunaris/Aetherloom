@@ -92,6 +92,10 @@ class Network:
         self.metrics_started=False
         self.tasks=set();self.server=None
         self.paths=weakref.WeakSet()
+        self.forwarder=None
+        self.running=True
+        self.mc_host="127.0.0.1"
+        self.log=lambda text:self.on_status(dict(channel="network",stage=text))
 
     def traffic(self,path,up,down):
         self.bytes_up+=up;self.bytes_down+=down
@@ -129,7 +133,25 @@ class Network:
             path=await self.path(info)
             stream=PolicyStream(self.manager,info['sid'],info['player'] if info['side']=='host' else info['host'],
                 info['side']=='host',reader,writer,path,reconnect,metadata={'generation':info['epoch'],'mode':info.get('mode','AUTO'),'channel':info.get('channel','data')})
-            await stream.run()
+            async def report():
+                while True:
+                    state=self.manager.states.get(info["sid"],{})
+                    fields={k:state[k] for k in ("active_path","switch_phase","direct_rtt_ms","relay_rtt_ms") if k in state}
+                    try:
+                        result=await asyncio.to_thread(self.request,"/api/connections/"+info["sid"]+"/report",{"epoch":info["epoch"],**fields})
+                        if result.get("closed"):
+                            stream.reason="管理员断开连接"
+                            stream.done.set()
+                            return
+                    except (OSError,RuntimeError,ValueError):
+                        pass
+                    await asyncio.sleep(4)
+            reporter=asyncio.create_task(report())
+            try:
+                await stream.run()
+            finally:
+                reporter.cancel()
+                await asyncio.gather(reporter,return_exceptions=True)
         finally:
             if writer:
                 writer.close()
@@ -138,6 +160,7 @@ class Network:
     async def peer_group(self,info):
         if info['sid'] in self.groups:return
         self.groups.add(info['sid'])
+        if self.forwarder:self.forwarder.attach(info)
         self.spawn(self.run_stream(info,None,None))
         def progress(stage,attempt=0):
             self.on_status(dict(session_id=info['sid'],channel='network',peer=info['player'] if info['side']=='host' else info['host'],mode=info.get('mode','AUTO'),stage=stage,attempt=attempt))
@@ -186,10 +209,17 @@ class Network:
                 self.on_status(dict(session_id='engine',channel='network',stage='联机连接失败：'+safe(str(error))))
                 writer.close()
         self.server=await asyncio.start_server(lambda r,w:self.spawn(accepted(r,w)),'127.0.0.1',0)
-        return self.server.sockets[0].getsockname()[1]
+        from .vendor.craftlink.udp_forward import Forwarder
+        port=self.server.sockets[0].getsockname()[1]
+        self.forwarder=Forwarder(self,None,False)
+        await self.forwarder.bind(port)
+        return port
 
     async def host(self,room,port,on_identity=None):
         self.start_metrics()
+        from .vendor.craftlink.udp_forward import Forwarder
+        self.mc_port=port
+        self.forwarder=Forwarder(self,None,True)
         attached=set()
         async def attach(info):
             if on_identity and info.get('identity'):on_identity(info['identity'])
@@ -205,6 +235,8 @@ class Network:
             await asyncio.sleep(.5)
 
     async def close(self):
+        self.running=False
+        if self.forwarder:self.forwarder.close()
         self.stopped.set()
         if self.server:self.server.close();await self.server.wait_closed()
         self.manager.close()
