@@ -737,7 +737,7 @@ class Window(ctk.CTk):
             ChoiceMenu(row,values=values,variable=variable,width=160).pack(side="right")
         for title,variable in (("允许作弊",self.host_cheats),("要求 Minecraft 正版验证",self.host_auth)):
             ctk.CTkSwitch(card,text=title,variable=variable,onvalue=True,offvalue=False).pack(anchor="w",padx=20,pady=8)
-        self.label(card,"启用正版验证后，离线或 LittleSkin 玩家可能无法加入。",12,MUTED).pack(anchor="w",padx=20,pady=4)
+        self.label(card,"正版验证使用 Minecraft 官方认证。离线玩家无法加入，LittleSkin 不能用于开启正版验证的 Host。",12,MUTED).pack(anchor="w",padx=20,pady=4)
         self.button(card,"保存预设",self.save,True).pack(anchor="e",padx=20,pady=16)
 
     def host_presets(self):

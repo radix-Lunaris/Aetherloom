@@ -208,6 +208,9 @@ class SharedSession:
                     await asyncio.sleep(.5)
                 self.state('complete',message='Player已退出，不上传共同世界')
                 return
+            presets=self.binding.get("host_presets",{})
+            if self.game_auth and presets.get("official_auth"):
+                raise ValueError("正版验证不能与 LittleSkin 外置认证同时启用。请关闭正版验证或切换 Host 游戏身份。")
             b=self.binding;world=Path(b['world']).resolve()
             if (world/'.aetherloom/pending-session.json').exists():
                 raise ValueError('此设备保留未处理的Host会话，请先提交恢复候选或另选绑定目录，禁止覆盖旧进度')
