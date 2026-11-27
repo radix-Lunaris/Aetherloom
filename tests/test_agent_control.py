@@ -29,6 +29,20 @@ class AgentControlTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,'损坏'):
                         check_agent_package(path)
 
+    def test_host_presets_do_not_leak_to_join_or_inspection(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'control.json'
+            settings={'pvp':'禁止','mode':'创造','cheats':True,'official_auth':False}
+            for case in ({},{'join':'127.0.0.1:1'},{'inspect':True}):
+                path.write_text(json.dumps(dict(identity=offline_uuid('Host'),**case)))
+                properties=agent_config(SimpleNamespace(config=path),host_presets=settings).read_text()
+                if not case:
+                    for line in ('host_pvp=false','host_mode=creative','host_cheats=true','host_official_auth=false'):
+                        self.assertIn(line,properties)
+                else:
+                    self.assertNotIn('host_',properties)
+
     def test_capabilities_identity_and_save_barriers(self):
         with tempfile.TemporaryDirectory() as directory:
             control=BridgeControl(Path(directory)/'世界',offline_uuid('Host'),backend='agent')

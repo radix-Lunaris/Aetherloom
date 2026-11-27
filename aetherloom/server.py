@@ -26,6 +26,10 @@ class Login(BaseModel):
     username: str
     password: str
 
+class SessionLogin(Login):
+    remember: bool = False
+
+
 class UserInput(Login):
     role: str = "player"
 
@@ -196,7 +200,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         return {"status":"ok","version":__version__,"stun_ports":ports}
 
     @app.post("/api/login")
-    def login(body:Login, request:Request):
+    def login(body:SessionLogin, request:Request):
         key=(request.client.host if request.client else 'unknown',body.username)
         now=time.monotonic()
         with attempts_lock:
@@ -221,7 +225,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
         token=secrets.token_urlsafe(32)
         with store.connect() as c:
             c.execute("INSERT INTO sessions VALUES (?,?,?)",
-                (hashlib.sha256(token.encode()).hexdigest(),row["name"],time.time()+43200))
+                (hashlib.sha256(token.encode()).hexdigest(),row["name"],time.time()+(30*86400 if body.remember else 43200)))
         return {"token":token,"username":row["name"],"role":row["role"]}
 
     @app.post("/api/logout")

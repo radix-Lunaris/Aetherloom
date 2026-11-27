@@ -464,29 +464,71 @@ public final class Agent {
             ))throw new IllegalStateException("Required lifecycle/identity hooks were not installed");
             pending=null;int port=0;
             if(!Boolean.parseBoolean(config.getProperty("inspect"))) {
-                call(server,"setUsesAuthentication","littleskin".equals(config.getProperty("auth_mode")));
+                boolean cheats=Boolean.parseBoolean(config.getProperty("host_cheats"));
+                boolean official=Boolean.parseBoolean(config.getProperty("host_official_auth"));
+                call(server,"setUsesAuthentication",official || "littleskin".equals(config.getProperty("auth_mode")));
+                if(config.containsKey("host_pvp")) {
+                    applyHostPvp(server,Boolean.parseBoolean(config.getProperty("host_pvp")));
+                }
+                Object mode=call(server,"getDefaultGameType");
+                if(config.containsKey("host_mode"))mode=hostGameMode(mode,config.getProperty("host_mode"));
                 if(legacy) {
-                    port=publishLegacy(server);
+                    port=publishLegacy(server,mode,cheats);
                 } else {
                     try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
-                    Object scope;
-                    try {scope=field(type("net.minecraft.server.MinecraftServer$MultiplayerScope"),"LAN");}
-                    catch(ClassNotFoundException older){scope=call(server,"getDefaultGameType");}
-                    if(!Boolean.TRUE.equals(call(server,"publishServer",scope,false,port)))throw new IllegalStateException("LAN publication failed");
+                    Object scope=mode;
+                    try {
+                        scope=field(type("net.minecraft.server.MinecraftServer$MultiplayerScope"),"LAN");
+                        if(config.containsKey("host_mode"))call(server,"setDefaultGameType",mode);
+                    }
+                    catch(ClassNotFoundException older){}
+                    if(!Boolean.TRUE.equals(call(server,"publishServer",scope,cheats,port)))throw new IllegalStateException("LAN publication failed");
                 }
+                if(config.containsKey("host_cheats"))System.out.println(
+                    "AETHERLOOM_AGENT_HOST_PRESETS pvp="+config.getProperty("host_pvp","world")
+                    +" mode="+config.getProperty("host_mode","world")+" cheats="+cheats+" officialAuth="+official);
             }
             checkIdentity(player);loaded=true;emit("ready",port);
         }
         if(stop && !stopping) {stopping=true;if(level!=null || server!=null)leave(mc);else call(mc,"stop");}
     }
-    static int publishLegacy(Object server) throws Exception {
-        Object mode=call(server,"getDefaultGameType");
+    static void applyHostPvp(Object server,boolean enabled) throws Exception {
+        try {call(server,"setPvpAllowed",enabled);return;}
+        catch(NoSuchMethodException missing) {}
+        try {call(server,"setPvp",enabled);return;}
+        catch(NoSuchMethodException missing) {}
+        try {
+            Object level=((Iterable<?>)call(server,"getAllLevels")).iterator().next();
+            Object rules=call(level,"getGameRules");
+            Object key;
+            try {key=field(rules.getClass(),"PVP");}
+            catch(NoSuchFieldException previous) {
+                key=field(rules.getClass(),"RULE_PVP");
+                call(call(rules,"getRule",key),"set",enabled,server);
+                return;
+            }
+            call(rules,"set",key,enabled,server);
+        } catch(ReflectiveOperationException missing) {
+            throw new IllegalStateException("This game adapter does not support the selected PvP override",missing);
+        }
+    }
+    static Object hostGameMode(Object current,String mode) throws Exception {
+        Class<?> type=((Enum<?>)current).getDeclaringClass();
+        for(Object value:type.getEnumConstants()) {
+            try {if(mode.equals(call(value,"getName")))return value;}
+            catch(NoSuchMethodException missing) {
+                if(mode.equalsIgnoreCase(((Enum<?>)value).name()))return value;
+            }
+        }
+        throw new IllegalStateException("This game adapter does not support game mode: "+mode);
+    }
+    static int publishLegacy(Object server,Object mode,boolean cheats) throws Exception {
         String reported;
-        try {reported=(String)call(server,"publishServer",mode,false);}
+        try {reported=(String)call(server,"publishServer",mode,cheats);}
         catch(NoSuchMethodException explicitPort) {
             int port;
             try(ServerSocket socket=new ServerSocket(0)){port=socket.getLocalPort();}
-            if(!Boolean.TRUE.equals(call(server,"publishServer",mode,false,port)))
+            if(!Boolean.TRUE.equals(call(server,"publishServer",mode,cheats,port)))
                 throw new IllegalStateException("Legacy LAN publication failed");
             return port;
         }

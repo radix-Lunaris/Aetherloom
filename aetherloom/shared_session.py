@@ -85,7 +85,7 @@ class SharedSession:
                 if forge52 or not supports_quick_play(manifest(Path(b['root']), b['version'])):
                     kwargs.pop('quick_play')
                     open_world = True
-            kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge, open_world=open_world))
+            kwargs.update(agent_jar=assets()/'aetherloom-agent.jar',agent_config=agent_config(self.bridge, open_world=open_world, host_presets=b.get("host_presets")))
         if self.game_auth:kwargs.update(game_auth=self.game_auth,authlib_jar=assets()/'authlib-injector.jar')
         process=launch(b['root'],b['version'],b['java'],b['name'],b['run'],int(b['memory']),options=b,custom_uuid=b.get('uuid'),before_start=self.guard.check if self.guard else None,managed=True,**kwargs)
         self.process=process;self.notify('process',process)

@@ -36,7 +36,12 @@ def inside(root, rel):
     root = Path(root).resolve()
     target = (root / rel).resolve()
     if not target.is_relative_to(root):
-        raise LaunchError("Path escapes selected directory")
+        # Windows may return a different path spelling while a parallel
+        # download creates a directory. Re-resolve both before rejecting.
+        root=root.resolve()
+        target=(root/rel).resolve()
+        if not target.is_relative_to(root):
+            raise LaunchError("Path escapes selected directory")
     return target
 
 def offline_uuid(name):

@@ -34,16 +34,26 @@ class ChoiceMenu(ctk.CTkOptionMenu):
     """Search long lists without changing the selected value while filtering."""
     def _open_dropdown_menu(self):
         values=self.cget("values")
-        if len(values)<5:
-            return super()._open_dropdown_menu()
+        if not values or self.cget("state")=="disabled":
+            return
         popup=ctk.CTkToplevel(self)
         popup.transient(self.winfo_toplevel())
-        popup.title("选择项目")
-        popup.geometry(f"440x320+{max(0,min(self.winfo_rootx(),self.winfo_screenwidth()-450))}+{max(0,min(self.winfo_rooty(),self.winfo_screenheight()-370))}")
-        search=ctk.CTkEntry(popup,placeholder_text="输入关键词筛选")
-        search.pack(fill="x",padx=12,pady=10)
+        popup.overrideredirect(True)
+
+        width=max(self.winfo_width(),240)
+        height=min(340,42+len(values)*26)
+        left=max(0,min(self.winfo_rootx(),self.winfo_screenwidth()-width))
+        top=self.winfo_rooty()+self.winfo_height()+4
+        if top+height>self.winfo_screenheight():
+            top=max(0,self.winfo_rooty()-height-4)
+        popup.geometry(f"{width}x{height}+{left}+{top}")
+        frame=ctk.CTkFrame(popup,fg_color=CARD,border_width=1,border_color=BORDER,corner_radius=10)
+        frame.pack(fill="both",expand=True)
+        search=ctk.CTkEntry(frame,placeholder_text="搜索选项")
+        if len(values)>=5:
+            search.pack(fill="x",padx=9,pady=(7,4))
         dark=ctk.get_appearance_mode()=="Dark"
-        items=tk.Listbox(popup,activestyle="none",borderwidth=0,highlightthickness=0,
+        items=tk.Listbox(frame,activestyle="none",borderwidth=0,highlightthickness=0,
             font=self.cget("font"),bg=CARD[int(dark)],fg=TEXT[int(dark)],
             selectbackground=PRIMARY[int(dark)],selectforeground="white")
         items.pack(fill="both",expand=True,padx=12,pady=(0,12))
@@ -70,7 +80,14 @@ class ChoiceMenu(ctk.CTkOptionMenu):
         items.bind("<Return>",choose)
         items.bind("<ButtonRelease-1>",choose)
         popup.bind("<Escape>",lambda _:popup.destroy())
-        popup.after(60,search.focus_set)
+        def outside(event):
+            if not (left<=event.x_root<left+width and top<=event.y_root<top+height):
+                popup.destroy()
+        popup.bind("<ButtonPress-1>",outside)
+        def activate():
+            popup.grab_set()
+            (search if len(values)>=5 else items).focus_set()
+        popup.after(40,activate)
 
 
 def physical_memory_mib():
@@ -225,6 +242,11 @@ class Window(ctk.CTk):
         appearance=ChoiceMenu(self.top,values=list(themes),width=100,command=change_theme)
         appearance.set(next((k for k,v in themes.items() if v==self.theme),"跟随系统"))
         appearance.pack(side="right",padx=8)
+        self.remember_login=tk.BooleanVar(value=False)
+        self.login_file=self.settings.path.parent/"server-login.bin"
+        self.avatar=self.button(self.top,"👤",self.open_server_account,True,width=40)
+        self.avatar.configure(corner_radius=20)
+        self.avatar.pack(side="right",padx=(8,0))
         self.connection=self.label(self.top,"●  本地模式",size=12,color=ACCENT)
         self.connection.pack(side="right")
         self.build_transfer_progress()
@@ -243,6 +265,7 @@ class Window(ctk.CTk):
         self.load_versions(silent=True)
         self.show("home")
         self.after(5000,self.auto_refresh)
+        self.after(200,self.restore_server_login)
         self.protocol("WM_DELETE_WINDOW",self.close)
         self.after(100,self.drain)
         self.after(1000,self.poll_game)
@@ -345,8 +368,14 @@ class Window(ctk.CTk):
         self.label(c,'自定义 UUID · 可选，留空按名称生成；修改后须重新绑定共享房间',12,MUTED).grid(row=2,column=0,sticky='w',padx=22,pady=(10,6))
         self.game_uuid_entry=self.entry(c,'uuid');self.game_uuid_entry.grid(row=3,column=0,sticky='ew',padx=22)
         modes=ctk.CTkFrame(c,fg_color='transparent');modes.grid(row=4,column=0,sticky='ew',padx=22,pady=(18,8))
-        for text,value in [('自动选择合适的 Java','auto'),('手动指定 Java','manual')]:
-            ctk.CTkRadioButton(modes,text=text,value=value,variable=self.values['java_mode'],font=self.font(13),fg_color=PRIMARY,command=self.java_mode_changed).pack(side='left',padx=(0,28))
+        java_modes={"自动选择":"auto","手动指定":"manual"}
+        java_selector=ctk.CTkSegmentedButton(modes,values=list(java_modes),
+            command=lambda label:(self.values["java_mode"].set(java_modes[label]),self.java_mode_changed()))
+        java_selector.pack(side="left")
+        def sync_java_mode(*_):
+            java_selector.set("手动指定" if self.values["java_mode"].get()=="manual" else "自动选择")
+        self.values["java_mode"].trace_add("write",sync_java_mode)
+        sync_java_mode()
         self.java_hint=self.label(c,'正在准备 Java 检测',12,MUTED,wraplength=650)
         self.java_hint.grid(row=5,column=0,sticky='w',padx=22,pady=6)
         self.path_row(c,6,'当前 Java 可执行文件','java',True)
@@ -388,35 +417,135 @@ class Window(ctk.CTk):
         entry=self.world_choices.get(self.world_menu.get(),{})
         if not entry.get('path'):return
         world=Path(entry['path'])
-        raw=ctk.CTkInputDialog(title='预览区块清理',text='清理停留时间低于多少秒的区块？清理将生成独立副本。').get_input()
-        if raw is None:return
-        try:
-            seconds=float(raw)
-            if not 0<seconds<=300:raise ValueError()
-        except ValueError:
-            self.note('请填写大于 0 且不超过 300 的秒数',True);return
         from .world_prune import clean_copy
-        def preview(plan):
-            if not plan:self.finish_transfer(True,'没有可安全清理的区块');return
-            if not messagebox.askyesno('确认生成清理副本',
-                    f'预计清理 {len(plan)} 个 region、实体或 POI 文件中的 {sum(len(v[0]) for v in plan.values())} 条记录。副本可从本地存档列表发布，原存档保留。',parent=self):
-                self.finish_transfer(True,'已取消区块清理');return
-            def complete(copy):
-                self.finish_transfer(True,'清理副本已生成：'+copy.name)
-                self.refresh_worlds()
-            self.task(lambda:clean_copy(world,seconds,plan),complete,failed)
-        def failed(error):
+        from .vendor.mcsync import chunk_prune
+        dialog=ctk.CTkToplevel(self)
+        dialog.title("区块清理")
+        dialog.geometry("720x615")
+        dialog.transient(self)
+        self.label(dialog,entry.get("world_name") or world.name,19,bold=True).pack(anchor="w",padx=18,pady=(14,4))
+        self.label(dialog,str(world),11,MUTED,wraplength=670).pack(anchor="w",padx=18)
+        settings=ctk.CTkScrollableFrame(dialog,height=106)
+        settings.pack(fill="x",padx=16,pady=8)
+        self.label(settings,"停留时间低于（秒）",13).pack(anchor="w",padx=8)
+        seconds=tk.StringVar(value=str(chunk_prune.DEFAULT_MAX_SECONDS))
+        ctk.CTkEntry(settings,textvariable=seconds,width=130).pack(anchor="w",padx=8)
+        dimensions={}
+        textbox=ctk.CTkTextbox(dialog,wrap="word")
+        textbox.pack(fill="both",expand=True,padx=16,pady=6)
+        buttons=ctk.CTkFrame(dialog,fg_color="transparent")
+        buttons.pack(fill="x",padx=16,pady=12)
+        pending={}
+        def render(text):
+            if dialog.winfo_exists():
+                textbox.configure(state="normal")
+                textbox.delete("1.0","end")
+                textbox.insert("1.0",text)
+                textbox.configure(state="disabled")
+        def invalidate(*_):
+            pending.clear()
+            for button in (copy_button,apply_button):
+                button.configure(state="disabled")
+        def busy():
+            return self.transfer_active or self.shared or self.launching or self.process and self.process.poll() is None
+        def scan():
+            if busy():return
+            invalidate()
+            try:
+                raw=seconds.get()
+                limit=float(raw)
+                if not 0<=limit<=3600:raise ValueError()
+            except ValueError:
+                render("请输入 0 至 3600 秒。")
+                return
+            selected={d for d,v in dimensions.items() if v.get()}
+            if not selected:
+                render("请至少选择一个维度。")
+                return
+            self.begin_transfer("prune","扫描存档区块")
+            render("正在检查 region、entities 和 POI 文件…")
+            def done(value):
+                plan,report=value
+                self.finish_transfer(True,"区块扫描完成")
+                if not dialog.winfo_exists():return
+                if raw!=seconds.get() or selected!={d for d,v in dimensions.items() if v.get()}:
+                    render("清理范围已变化，请重新扫描。")
+                    return
+                pending.update(plan=plan,limit=limit,selected=selected)
+                rows=[f"扫描 {report.total_chunks} 个地形区块 · 跳过 {report.skipped_chunks} 个记录",
+                      f"预计处理 {len(plan)} 个文件，释放约 {human_bytes(report.freed_bytes)}（上游扫描估算）"]
+                for item in report.regions:
+                    file=Path(item.path).resolve().relative_to(world)
+                    if file in plan:
+                        rows.append(f"{item.dimension} / {item.kind} / {file.name} · {len(plan[file][0])} 条记录")
+                render("\n".join(rows) if plan else "没有可安全清理的区块。")
+                for button in (copy_button,apply_button):
+                    button.configure(state="normal" if plan else "disabled")
+            self.task(lambda:clean_copy(world,limit,dimensions=selected,report_only=True),done,fail)
+        def fail(error):
             self.finish_transfer(False,error)
-            self.note(error,True)
-        self.begin_transfer('prune','正在扫描选定存档')
-        self.task(lambda:clean_copy(world,seconds),preview,failed)
+            render(error)
+        def execute(in_place):
+            if not pending or busy():return
+            limit,plan,selected=(pending[k] for k in ("limit","plan","selected"))
+            if in_place and not messagebox.askyesno("备份并清理原存档",
+                    "将先创建完整备份，再清理原存档。请确认游戏已经关闭。",parent=dialog):
+                return
+            invalidate()
+            self.begin_transfer("prune","正在清理区块")
+            def done(result):
+                if in_place:
+                    detail=(f"备份：{result['backup']}\n处理文件 {result['touched_files']} · 删除文件 {result['deleted_files']}"
+                            f" · 释放 {human_bytes(result['freed_bytes'])}\n"+"\n".join(result["errors"]))
+                    self.finish_transfer(result["ok"],"区块清理完成" if result["ok"] else "部分文件清理失败，详见报告")
+                else:
+                    detail="清理副本："+str(result)
+                    self.finish_transfer(True,"清理副本已生成")
+                render(detail)
+                self.refresh_worlds()
+            self.task(lambda:clean_copy(world,limit,plan,dimensions=selected,in_place=in_place),done,fail)
+        scan_button=self.button(buttons,"扫描预览",scan,True)
+        scan_button.pack(side="left")
+        scan_button.configure(state="disabled")
+        copy_button=self.button(buttons,"生成清理副本",lambda:execute(False))
+        copy_button.pack(side="right",padx=6)
+        apply_button=self.button(buttons,"备份并清理原档",lambda:execute(True))
+        apply_button.pack(side="right",padx=6)
+        invalidate()
+        seconds.trace_add("write",invalidate)
+        def supported(result):
+            if not dialog.winfo_exists():return
+            ok,reason,dims=result
+            render(reason)
+            if ok:
+                for dimension in dims:
+                    variable=tk.BooleanVar(value=True)
+                    dimensions[dimension["label"]]=variable
+                    ctk.CTkCheckBox(settings,text=dimension["label"],variable=variable,command=invalidate).pack(anchor="w",padx=8,pady=2)
+                scan_button.configure(state="normal")
+        def diagnose():
+            ok,reason=chunk_prune.capability(str(world))
+            if not ok:
+                return ok,reason,[]
+            return ok,reason,chunk_prune.discover_dimensions(str(world))
+        self.task(diagnose,supported,render)
 
     def auto_worlds(self):
         self.maybe_refresh_worlds();self.after(15000,self.auto_worlds)
 
+    def world_signature(self,run):
+        saves=Path(run)/"saves"
+        selected=self.world_choices.get(self.world_menu.get(),{})
+        icon=Path(selected["path"])/"icon.png" if "path" in selected else None
+        try:
+            cover=(icon.stat().st_mtime_ns,icon.stat().st_size) if icon else None
+        except OSError:
+            cover=None
+        return (run,saves.stat().st_mtime_ns,cover)
+
     def maybe_refresh_worlds(self):
         run=self.values['run'].get().strip() or self.values['root'].get().strip()
-        try:signature=(run,(Path(run)/'saves').stat().st_mtime_ns)
+        try:signature=self.world_signature(run)
         except OSError:signature=(run,None)
         if signature!=self.world_scan_key:self.refresh_worlds()
 
@@ -424,7 +553,7 @@ class Window(ctk.CTk):
         if self.shared or self.process and self.process.poll() is None:return
         run=self.values['run'].get().strip() or self.values['root'].get().strip()
         if not run or not hasattr(self,'world_menu'):return
-        try:self.world_scan_key=(run,(Path(run)/'saves').stat().st_mtime_ns)
+        try:self.world_scan_key=self.world_signature(run)
         except OSError:self.world_scan_key=(run,None)
         self.world_generation+=1;generation=self.world_generation
         from .worlds import discover
@@ -438,19 +567,22 @@ class Window(ctk.CTk):
             self.world_menu.configure(values=list(self.world_choices) or ['当前运行目录没有存档'])
             self.world_menu.set(old if old in self.world_choices else next(iter(self.world_choices),'当前运行目录没有存档'))
             self.select_world(self.world_menu.get())
+            try:self.world_scan_key=self.world_signature(run)
+            except OSError:pass
         self.task(lambda:discover(run),done)
 
     def select_world(self,label):
         world=self.world_choices.get(label)
-        self.world_cover.configure(image=None,text='◇')
+        from PIL import Image
+        empty=ctk.CTkImage(light_image=Image.new("RGBA",(1,1)),size=(1,1))
+        self.world_cover.configure(image=empty,text="未提供封面")
         if world:
-            from PIL import Image
             preview=Path(world['path'])/'icon.png'
             try:
-                if not preview.is_symlink() and preview.stat().st_size<=256*1024:
+                if not preview.is_symlink() and preview.stat().st_size<=8*1024*1024:
                     with Image.open(preview,formats=['PNG']) as picture:
-                        if max(picture.size)<=256:
-                            self.world_cover.configure(image=ctk.CTkImage(light_image=picture.convert('RGBA'),size=(64,64)),text='')
+                        if max(picture.size)<=4096:
+                            self.world_cover.configure(image=ctk.CTkImage(light_image=picture.convert('RGBA'),size=(84,84)),text='')
             except (OSError,ValueError,Image.DecompressionBombError):
                 pass
         if not world:self.world_hint.configure(text='当前运行目录没有检测到存档；可在共享世界发布时手动定位。');return
@@ -585,6 +717,33 @@ class Window(ctk.CTk):
         self.entry(f,key).grid(row=0,column=0,sticky="ew")
         self.button(f,"浏览",lambda:self.pick(key,file),width=72).grid(row=0,column=1,padx=(10,0))
 
+    def build_host_presets(self,parent):
+        e=self.settings.data.get("host_presets",{})
+        self.host_pvp=tk.StringVar(value=e.get("pvp","随世界"))
+        self.host_cheats=tk.BooleanVar(value=e.get("cheats",False))
+        self.host_auth=tk.BooleanVar(value=e.get("official_auth",False))
+        self.host_mode=tk.StringVar(value=e.get("mode","随世界"))
+        card=self.card(parent)
+        card.pack(fill="x",padx=16,pady=16)
+        self.label(card,"Host 联机预设",20,bold=True).pack(anchor="w",padx=20,pady=(16,4))
+        self.label(card,"仅在本机接管共享世界并开放局域网时应用。",13,MUTED).pack(anchor="w",padx=20,pady=(0,12))
+        for title,values,variable in (
+            ("玩家对战",["随世界","允许","禁止"],self.host_pvp),
+            ("默认游戏模式",["随世界","生存","创造","冒险","旁观"],self.host_mode),
+        ):
+            row=ctk.CTkFrame(card,fg_color="transparent")
+            row.pack(fill="x",padx=20,pady=6)
+            self.label(row,title,14).pack(side="left")
+            ChoiceMenu(row,values=values,variable=variable,width=160).pack(side="right")
+        for title,variable in (("允许作弊",self.host_cheats),("要求 Minecraft 正版验证",self.host_auth)):
+            ctk.CTkSwitch(card,text=title,variable=variable,onvalue=True,offvalue=False).pack(anchor="w",padx=20,pady=8)
+        self.label(card,"启用正版验证后，离线或 LittleSkin 玩家可能无法加入。",12,MUTED).pack(anchor="w",padx=20,pady=4)
+        self.button(card,"保存预设",self.save,True).pack(anchor="e",padx=20,pady=16)
+
+    def host_presets(self):
+        return dict(pvp=self.host_pvp.get(),mode=self.host_mode.get(),
+                    cheats=self.host_cheats.get(),official_auth=self.host_auth.get())
+
     def build_cloud(self):
         p=self.pages["cloud"]
         self.heading(p,"共享世界","连接你的服务器，查看实例与在线会话。")
@@ -592,7 +751,7 @@ class Window(ctk.CTk):
         bar.pack(fill="x",pady=(0,10))
         self.cloud_state=self.label(bar,"尚未连接",13,MUTED)
         self.cloud_state.pack(side="left")
-        self.button(bar,"服务器账号",self.open_server_account).pack(side="right")
+
         self.login_dialog=ctk.CTkToplevel(self)
         self.login_dialog.withdraw()
         self.login_dialog.title("登录 Aetherloom")
@@ -610,14 +769,18 @@ class Window(ctk.CTk):
             fg_color=("#F7F9FC","#13151D"),border_color=BORDER,font=self.font(13))
         self.password_entry.grid(row=5,column=1,sticky="ew",padx=(8,22),pady=6)
         self.password_entry.bind("<Return>",lambda _:self.login())
+        remember=ctk.CTkCheckBox(card,text="在此 Windows 账号下记住登录（30 天）",variable=self.remember_login)
+        remember.grid(row=6,column=0,columnspan=2,sticky="w",padx=22,pady=(6,0))
+        if os.name!="nt":remember.configure(state="disabled")
         self.login_button=self.button(card,"登录服务器",self.login,True,width=150)
-        self.login_button.grid(row=6,column=1,sticky="e",padx=22,pady=(14,20))
+        self.login_button.grid(row=7,column=1,sticky="e",padx=22,pady=(14,20))
         tabs=ctk.CTkTabview(p)
         tabs.pack(fill="both",expand=True)
         local=tabs.add("本地存档")
         local.grid_columnconfigure(0,weight=1)
         self.build_worlds(local)
         p=tabs.add("共享房间")
+        self.build_host_presets(tabs.add("Host 联机预设"))
         tabs.set("共享房间")
         toolbar=ctk.CTkFrame(p,fg_color="transparent");toolbar.pack(fill="x",pady=(0,10))
         self.label(toolbar,"共享房间",17,bold=True).pack(side="left")
@@ -683,7 +846,7 @@ class Window(ctk.CTk):
 
     def save(self):
         self.remember_profile()
-        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},offline_profiles=self.offline_profiles,theme=self.theme,room_bindings=self.bindings,auto_run_path=self.auto_run,selected_room=self.selected_room,local_profiles=self.profiles))
+        try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},host_presets=self.host_presets(),offline_profiles=self.offline_profiles,theme=self.theme,room_bindings=self.bindings,auto_run_path=self.auto_run,selected_room=self.selected_room,local_profiles=self.profiles))
         except OSError as e:self.note("配置保存失败："+str(e),True);return False
         self.refresh_summary();self.maybe_refresh_worlds();self.note("配置已保存");return True
 
@@ -816,20 +979,64 @@ class Window(ctk.CTk):
         self.save();self.token="";self.login_busy=True
         for b in self.cloud_buttons:b.configure(state="disabled")
         self.login_button.configure(state="disabled",text="正在连接…")
+        remember=self.remember_login.get()
         def done(result):
-            self.login_busy=False;self.login_button.configure(state="normal",text="重新登录")
-            self.token=result["token"];self.server_url=url;self.password.set("")
-            self.cloud_user=result['username'];self.cloud_role=result['role']
-            self.cloud_state.configure(text=username+" · "+result["role"],text_color=ACCENT)
-            self.connection.configure(text="●  已连接服务器")
-            self.home_connection.configure(text="已连接")
-            for b in self.cloud_buttons:b.configure(state="normal")
-            self.login_dialog.withdraw();self.note("服务器登录成功");self.rooms()
+            self.finish_server_login(url,result)
+            from .game_accounts import dpapi
+            try:
+                if remember:
+                    payload=json.dumps({"url":url,"token":self.token}).encode()
+                    pending=self.login_file.with_suffix(".tmp")
+                    pending.write_bytes(dpapi(payload))
+                    os.replace(pending,self.login_file)
+                else:
+                    self.login_file.unlink(missing_ok=True)
+            except (OSError,ValueError):
+                self.note("已登录，但 Windows 未能保存登录状态",True)
         def failed(message):
             self.login_busy=False;self.login_button.configure(state="normal",text="登录服务器")
             self.cloud_state.configure(text="连接未完成",text_color="#F0AF9C")
             self.connection.configure(text="●  本地模式");self.home_connection.configure(text="本地模式");self.note(message,True)
-        self.task(lambda:self.request(url,"","/api/login",{"username":username,"password":password}),done,failed)
+        self.task(lambda:self.request(url,"","/api/login",{"username":username,"password":password,**({"remember":True} if remember else {})}),done,failed)
+
+    def finish_server_login(self,url,result):
+        self.login_busy=False
+        self.login_button.configure(state="normal",text="登录服务器")
+        self.token=result["token"]
+        self.server_url=url
+        self.password.set("")
+        self.cloud_user=result["username"]
+        self.cloud_role=result["role"]
+        self.avatar.configure(text=self.cloud_user[0].upper())
+        self.cloud_state.configure(text=self.cloud_user+" · "+self.cloud_role,text_color=ACCENT)
+        self.connection.configure(text="●  已连接服务器")
+        self.home_connection.configure(text="已连接")
+        for button in self.cloud_buttons:
+            button.configure(state="normal")
+        self.login_dialog.withdraw()
+        self.note("服务器登录成功")
+        self.rooms()
+
+    def restore_server_login(self):
+        if not self.login_file.is_file() or self.login_busy or self.token:
+            return
+        from .game_accounts import dpapi
+        try:
+            saved=json.loads(dpapi(self.login_file.read_bytes(),True))
+            url,token=saved["url"],saved["token"]
+        except (KeyError,OSError,ValueError):
+            self.note("无法读取已记住的登录，请手动登录",True)
+            return
+        self.login_busy=True
+        def done(result):
+            self.remember_login.set(True)
+            self.values["url"].set(url)
+            self.values["username"].set(result["name"])
+            self.finish_server_login(url,{"username":result["name"],"role":result["role"],"token":token})
+        def failed(_message):
+            self.login_busy=False
+            self.note("未能恢复登录，请点击头像重新登录",True)
+        self.task(lambda:self.request(url,token,"/api/me"),done,failed)
 
     def cloud_task(self,path,done,body=None,method=None):
         if not self.token:self.note("请先登录服务器",True);return
@@ -1079,20 +1286,30 @@ class Window(ctk.CTk):
     def account_settings(self):
         if self.shared:self.note('请先结束共享会话，再修改软件账号',True);return
         dialog=ctk.CTkToplevel(self)
-        dialog.title("服务器账号")
+        dialog.title("个人中心")
         dialog.transient(self)
         self.label(dialog,self.cloud_user+" · "+self.cloud_role,18,bold=True).pack(padx=24,pady=18)
         def choose(action):
             dialog.destroy()
-            if action=="退出登录":
-                self.cloud_task('/api/logout',self.clear_server_login,{},method='POST')
+            if action in ("退出登录","换账号登录"):
+                def logout(result):
+                    self.clear_server_login(result)
+                    if action=="换账号登录":
+                        self.values["username"].set("")
+                        self.open_server_account()
+                self.cloud_task('/api/logout',logout,{},method='POST')
             else:
                 self.edit_server_account(action)
-        for action in ("改名","改密","退出登录"):
+        for action in ("改名","改密","换账号登录","退出登录"):
             self.button(dialog,action,lambda item=action:choose(item)).pack(fill="x",padx=24,pady=6)
 
     def clear_server_login(self,_result):
         self.token=self.cloud_user=self.cloud_role=""
+        self.avatar.configure(text="👤")
+        try:
+            self.login_file.unlink(missing_ok=True)
+        except OSError:
+            self.note("未能清理本地登录记录",True)
         self.cloud_state.configure(text="尚未连接")
         self.connection.configure(text="●  本地模式")
         self.home_connection.configure(text="本地模式")
@@ -1150,7 +1367,7 @@ class Window(ctk.CTk):
             self.events.put((apply,None,'notification'))
         self.selected_room=room['id'];self.save()
         try:
-            self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']]),notify,recovery,game_accounts=self.game_accounts)
+            self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']],host_presets=self.host_presets()),notify,recovery,game_accounts=self.game_accounts)
         except (ValueError, OSError, KeyError) as error:
             self.note(str(error),True)
             return

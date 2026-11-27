@@ -31,10 +31,19 @@ def check_agent_package(path):
     except (OSError,ValueError,KeyError,RuntimeError,zipfile.BadZipFile,zlib.error) as error:
         raise ValueError('交付包中的 Agent 已损坏或版本不匹配，请重新下载 Aetherloom') from error
 
-def agent_config(control, *, open_world=False):
+def agent_config(control, *, open_world=False, host_presets=None):
     data=json.loads(control.config.read_text(encoding='utf-8'))
     if open_world:
         data['open_world'] = True
+    if host_presets and not (data.get("inspect") or data.get("join")):
+        pvp={"允许":"true","禁止":"false"}.get(host_presets.get("pvp"))
+        mode={"生存":"survival","创造":"creative","冒险":"adventure","旁观":"spectator"}.get(host_presets.get("mode"))
+        if pvp is not None:
+            data["host_pvp"]=pvp
+        if mode is not None:
+            data["host_mode"]=mode
+        data["host_cheats"]=bool(host_presets.get("cheats"))
+        data["host_official_auth"]=bool(host_presets.get("official_auth"))
     data.setdefault('adapter','1.20.1-forge');data['identity']=str(uuid.UUID(data['identity']))
     # Properties.load uses ISO-8859-1 with Java unicode escapes.
     def escape(value):

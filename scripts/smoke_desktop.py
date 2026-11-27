@@ -59,6 +59,35 @@ with tempfile.TemporaryDirectory() as d,patch('aetherloom.gui.probe_nat',return_
         assert window.start.cget('text').startswith('离线启动')
         assert window.online.cget('text').startswith('在线启动')
         assert launch.call_args.kwargs.get('bridge_file') is None
+        from PIL import Image
+        cover_dir=root/'world-cover'
+        cover_dir.mkdir()
+        Image.new('RGB',(512,512),'navy').save(cover_dir/'icon.png')
+        window.world_choices['cover']={'path':str(cover_dir),'error':None}
+        window.select_world('cover')
+        assert window.world_cover.cget('image').cget('size')==(84,84)
+        window.select_world('missing')
+        assert window.world_cover.cget('text')=='未提供封面'
+        if sys.platform=='win32':
+            saved='protected-smoke-token'
+            window.clear_server_login({})
+            window.remember_login.set(True)
+            window.password.set('never-store-password')
+            def login_result(url,token,path,body=None):
+                if path=='/api/login':
+                    assert body['remember'] is True
+                    return dict(token=saved,username='test',role='player')
+                assert path=='/api/me' and token==saved
+                return dict(name='test',role='player')
+            with patch.object(Window,'request',side_effect=login_result),patch('aetherloom.cloud.API.__call__',return_value=[]):
+                window.login()
+                wait(window,lambda:window.login_file.exists() and window.pending==0)
+                encrypted=window.login_file.read_bytes()
+                assert saved.encode() not in encrypted and b'never-store-password' not in encrypted
+                window.token=''
+                window.restore_server_login()
+                wait(window,lambda:window.token==saved and window.pending==0)
+            assert window.avatar.cget('text')=='T'
         # Polling must retain existing room widgets and scroll position.
         rooms=[dict(id=str(i),owner='test',name='room '+str(i),environment='1.20.1 Forge 47.4.22',host=None,state='idle',head='v1',expires=0,epoch=0) for i in range(15)]
         with patch('aetherloom.cloud.API.__call__',return_value=rooms):
@@ -126,7 +155,7 @@ with tempfile.TemporaryDirectory() as d,patch('aetherloom.gui.probe_nat',return_
         assert window.values['name'].get()=='SkinPlayer'
         assert window.game_uuid_entry.cget('state')=='disabled'
         assert window.current_binding()['game_account']=='test-littleskin'
-        assert 'must-not-enter-settings' not in window.settings.path.read_text()
+        assert 'must-not-enter-settings' not in window.settings.path.read_text(encoding='utf8')
         window.select_game_account('离线游戏账号')
         assert window.game_uuid_entry.cget('state')=='normal'
         window.begin_transfer('online','准备在线会话')

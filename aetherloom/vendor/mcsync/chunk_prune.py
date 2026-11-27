@@ -755,27 +755,17 @@ def rewrite_region(path: str, verdicts: Dict[int, ChunkVerdict]) -> Tuple[int, b
 
 
 def backup_save(save_dir: str) -> str:
-    """执行前强制备份（硬链接优先，省空间且快）。"""
+    """Create an independent backup and abort on any copy failure."""
+    import tempfile
     root = os.path.join(os.path.dirname(os.path.normpath(save_dir)), "_MCSyncBackups")
     os.makedirs(root, exist_ok=True)
+    if os.path.realpath(root)!=os.path.abspath(root):
+        raise ValueError("备份目录不可使用链接")
     name = os.path.basename(os.path.normpath(save_dir))
-    dst = os.path.join(root, f"{name}-{time.strftime('%Y%m%d-%H%M%S')}-区块清理前")
-    os.makedirs(dst, exist_ok=True)
-    for r, dirs, files in os.walk(save_dir):
-        dirs[:] = [d for d in dirs if d not in (".mcsync", "_MCSyncBackups")]
-        rel = os.path.relpath(r, save_dir)
-        target = os.path.join(dst, rel) if rel != "." else dst
-        os.makedirs(target, exist_ok=True)
-        for fn in files:
-            s, d = os.path.join(r, fn), os.path.join(target, fn)
-            try:
-                os.link(s, d)
-            except Exception:
-                try:
-                    shutil.copy2(s, d)
-                except OSError:
-                    pass
-    return dst
+    dst = tempfile.mkdtemp(prefix=f"{name}-区块清理前-", dir=root)
+    target=os.path.join(dst,"world")
+    shutil.copytree(save_dir,target,ignore=shutil.ignore_patterns(".mcsync","_MCSyncBackups","session.lock"))
+    return target
 
 
 def apply(report: PruneReport) -> dict:
@@ -801,6 +791,8 @@ def apply(report: PruneReport) -> dict:
             old = r.verdicts.get(idx)
             if old and old.reason == "prune":
                 v.reason = "prune"
+            elif v.reason == "prune":
+                v.reason = "keep"
             new_verdicts[idx] = v
         try:
             n, removed = rewrite_region(r.path, new_verdicts)
