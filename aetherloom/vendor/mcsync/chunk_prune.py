@@ -756,12 +756,15 @@ def rewrite_region(path: str, verdicts: Dict[int, ChunkVerdict]) -> Tuple[int, b
 
 def backup_save(save_dir: str) -> str:
     """Create an independent backup and abort on any copy failure."""
+    import stat
     import tempfile
-    root = os.path.join(os.path.dirname(os.path.normpath(save_dir)), "_MCSyncBackups")
-    os.makedirs(root, exist_ok=True)
-    if os.path.realpath(root)!=os.path.abspath(root):
+    from pathlib import Path
+    save_dir=Path(save_dir).resolve(strict=True)
+    root=save_dir.parent/"_MCSyncBackups"
+    root.mkdir(exist_ok=True)
+    if root.is_symlink() or getattr(root.lstat(),"st_file_attributes",0)&stat.FILE_ATTRIBUTE_REPARSE_POINT:
         raise ValueError("备份目录不可使用链接")
-    name = os.path.basename(os.path.normpath(save_dir))
+    name = save_dir.name
     dst = tempfile.mkdtemp(prefix=f"{name}-区块清理前-", dir=root)
     target=os.path.join(dst,"world")
     shutil.copytree(save_dir,target,ignore=shutil.ignore_patterns(".mcsync","_MCSyncBackups","session.lock"))
