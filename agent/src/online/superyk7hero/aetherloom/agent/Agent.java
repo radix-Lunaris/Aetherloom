@@ -464,6 +464,7 @@ public final class Agent {
             ))throw new IllegalStateException("Required lifecycle/identity hooks were not installed");
             pending=null;int port=0;
             if(!Boolean.parseBoolean(config.getProperty("inspect"))) {
+                applyExtendedHostSettings(mc,server);
                 boolean cheats=Boolean.parseBoolean(config.getProperty("host_cheats"));
                 boolean official=Boolean.parseBoolean(config.getProperty("host_official_auth"));
                 call(server,"setUsesAuthentication",official || "littleskin".equals(config.getProperty("auth_mode")));
@@ -491,6 +492,62 @@ public final class Agent {
             checkIdentity(player);loaded=true;emit("ready",port);
         }
         if(stop && !stopping) {stopping=true;if(level!=null || server!=null)leave(mc);else call(mc,"stop");}
+    }
+    static HostCommands hostCommand(Object server) throws Exception {
+        Object root=call(server,"getCommands");
+        return new HostCommands(root,call(root,"getDispatcher"),call(server,"createCommandSourceStack"));
+    }
+
+    static final class HostCommands {
+        final Object commands,dispatcher,source;
+        HostCommands(Object commands,Object dispatcher,Object source) {
+            this.commands=commands;this.dispatcher=dispatcher;this.source=source;
+        }
+        Object validate(String command) throws Exception {
+            Object parse=call(dispatcher,"parse",command,source);
+            if(Boolean.TRUE.equals(call(call(parse,"getReader"),"canRead")) || call(call(parse,"getContext"),"getCommand")==null)
+                throw new IllegalArgumentException("Unsupported Minecraft setting for this version: "+command);
+            return parse;
+        }
+        void run(String command,Object parse) throws Exception {
+            try {call(commands,"performPrefixedCommand",source,command);}
+            catch(NoSuchMethodException old) {call(dispatcher,"execute",parse);}
+        }
+    }
+
+    static void applyExtendedHostSettings(Object mc,Object server) throws Exception {
+        String difficulty=config.getProperty("host_difficulty");
+        String time=config.getProperty("host_time");
+        String weather=config.getProperty("host_weather");
+        String border=config.getProperty("host_world_border");
+        String rules=config.getProperty("host_game_rules");
+        String view=config.getProperty("host_view_distance");
+        String simulation=config.getProperty("host_simulation_distance");
+        List<String> commands=new ArrayList<String>();
+        if(difficulty!=null)commands.add("difficulty "+difficulty);
+        if(time!=null)commands.add("time set "+time);
+        if(weather!=null)commands.add("weather "+weather);
+        if(border!=null)commands.add("worldborder set "+border);
+        if(rules!=null)for(String rule:rules.split(";"))commands.add("gamerule "+rule);
+        if(view!=null || simulation!=null) {
+            Object options=field(mc,"options");
+            if(view!=null)call(call(options,"renderDistance"),"set",Integer.valueOf(view));
+            if(simulation!=null)call(call(options,"simulationDistance"),"set",Integer.valueOf(simulation));
+        }
+        if(!commands.isEmpty()) {
+            FutureTask<Void> settings=new FutureTask<Void>(()->{
+                HostCommands source=hostCommand(server);
+                Map<String,Object> parsed=new LinkedHashMap<String,Object>();
+                for(String command:commands)parsed.put(command,source.validate(command));
+                for(Map.Entry<String,Object> command:parsed.entrySet())source.run(command.getKey(),command.getValue());
+                return null;
+            });
+            ((Executor)server).execute(settings);
+            try {settings.get(8,TimeUnit.SECONDS);}
+            catch(ExecutionException failure) {
+                throw new IllegalStateException("Host settings failed: "+failure.getCause().getMessage(),failure.getCause());
+            }
+        }
     }
     static void applyHostPvp(Object server,boolean enabled) throws Exception {
         try {call(server,"setPvpAllowed",enabled);return;}

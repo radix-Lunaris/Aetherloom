@@ -215,23 +215,39 @@ class Network:
         await self.forwarder.bind(port)
         return port
 
-    async def host(self,room,port,on_identity=None):
+    async def host(self,room,port,on_identity=None,*,max_players=None,allowed_players=()):
         self.start_metrics()
         from .vendor.craftlink.udp_forward import Forwarder
         self.mc_port=port
         self.forwarder=Forwarder(self,None,True)
         attached=set()
+        active_players={}
         async def attach(info):
-            if on_identity and info.get('identity'):on_identity(info['identity'])
-            reader,writer=await asyncio.open_connection('127.0.0.1',port)
-            await self.run_stream(info,reader,writer)
+            player=info["player"]
+            if (allowed_players and player not in allowed_players) or (max_players and player not in active_players and len(active_players)>=max_players-1):
+                self.on_status(dict(channel="network",stage="根据 Host 白名单或玩家上限拒绝 "+player))
+                return
+            active_players[player]=active_players.get(player,0)+1
+            try:
+                if on_identity and info.get('identity'):on_identity(info['identity'])
+                reader,writer=await asyncio.open_connection('127.0.0.1',port)
+                await self.run_stream(info,reader,writer)
+            finally:
+                active_players[player]-=1
+                if not active_players[player]:
+                    del active_players[player]
         while True:
             items=await asyncio.to_thread(self.request,'/api/rooms/'+room+'/connections')
             for info in items:
-                if info['sid'] not in attached:
-                    attached.add(info['sid'])
-                    if info.get('channel')=='network':await self.peer_group(info)
-                    else:self.spawn(attach(info))
+                if info['sid'] in attached:
+                    continue
+                if info.get('channel')=='network':
+                    if (max_players or allowed_players) and info["player"] not in active_players:
+                        continue
+                    await self.peer_group(info)
+                else:
+                    self.spawn(attach(info))
+                attached.add(info['sid'])
             await asyncio.sleep(.5)
 
     async def close(self):

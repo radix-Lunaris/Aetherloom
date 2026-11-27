@@ -1,5 +1,6 @@
 """Choose managed game control from the installed instance."""
 import json
+import re
 from pathlib import Path
 import uuid
 import zipfile
@@ -31,11 +32,53 @@ def check_agent_package(path):
     except (OSError,ValueError,KeyError,RuntimeError,zipfile.BadZipFile,zlib.error) as error:
         raise ValueError('交付包中的 Agent 已损坏或版本不匹配，请重新下载 Aetherloom') from error
 
+def validate_host_settings(presets):
+    result={}
+    for key,label,low,high in (("players","玩家上限",2,100),("view_distance","区块视距",2,32),
+                                ("simulation_distance","模拟距离",5,32),("world_border","边界直径",1,59999968)):
+        raw=presets.get(key,"")
+        if raw:
+            if not raw.isdecimal() or not low<=int(raw)<=high:
+                raise ValueError(f"{label}须为 {low} 至 {high} 的整数")
+            result[key]=int(raw)
+    difficulty={"和平":"peaceful","简单":"easy","普通":"normal","困难":"hard"}.get(presets.get("difficulty"))
+    if difficulty:
+        result["difficulty"]=difficulty
+    for key,values in (("time",{"白天":"day","正午":"noon","夜晚":"night","午夜":"midnight"}),
+                       ("weather",{"晴天":"clear","下雨":"rain","雷暴":"thunder"})):
+        value=values.get(presets.get(key))
+        if value:
+            result[key]=value
+    rules={}
+    for part in presets.get("game_rules","").split(";"):
+        if not part.strip():
+            continue
+        key,_,value=(v.strip() for v in part.strip().partition("="))
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}",key) or not re.fullmatch(r"true|false|-?[0-9]{1,10}",value) or key in rules:
+            raise ValueError("游戏规则须使用不重复的“规则名=整数或 true/false”")
+        rules[key]=value
+    if len(rules)>128:
+        raise ValueError("游戏规则最多 128 项")
+    if rules:
+        result["rules"]=rules
+    names={name.strip() for name in presets.get("allowlist","").split(",") if name.strip()}
+    if len(names)>100 or any(len(name)>32 or any(char.isspace() for char in name) for name in names):
+        raise ValueError("白名单最多 100 个账号，各账号须为 1–32 个非空白字符")
+    result["allowlist"]=names
+    return result
+
+
 def agent_config(control, *, open_world=False, host_presets=None):
     data=json.loads(control.config.read_text(encoding='utf-8'))
     if open_world:
         data['open_world'] = True
     if host_presets and not (data.get("inspect") or data.get("join")):
+        settings=validate_host_settings(host_presets)
+        for key in ("difficulty","view_distance","simulation_distance","time","weather","world_border"):
+            if key in settings:
+                data["host_"+key]=settings[key]
+        if settings.get("rules"):
+            data["host_game_rules"]=";".join(key+" "+value for key,value in settings["rules"].items())
         pvp={"允许":"true","禁止":"false"}.get(host_presets.get("pvp"))
         mode={"生存":"survival","创造":"creative","冒险":"adventure","旁观":"spectator"}.get(host_presets.get("mode"))
         if pvp is not None:

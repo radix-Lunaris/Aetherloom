@@ -31,14 +31,17 @@ class AgentControlTests(unittest.TestCase):
 
     def test_host_presets_do_not_leak_to_join_or_inspection(self):
         from types import SimpleNamespace
+        from aetherloom.game_control import validate_host_settings
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'control.json'
-            settings={'pvp':'禁止','mode':'创造','cheats':True,'official_auth':False}
+            settings={'pvp':'禁止','mode':'创造','cheats':True,'official_auth':False,'players':'8','difficulty':'简单','game_rules':'keepInventory=true','allowlist':'member,owner'}
+            self.assertEqual(validate_host_settings(settings)['allowlist'],{'member','owner'})
+            with self.assertRaises(ValueError):validate_host_settings({'game_rules':'keepInventory=true;stop'})
             for case in ({},{'join':'127.0.0.1:1'},{'inspect':True}):
                 path.write_text(json.dumps(dict(identity=offline_uuid('Host'),**case)))
                 properties=agent_config(SimpleNamespace(config=path),host_presets=settings).read_text()
                 if not case:
-                    for line in ('host_pvp=false','host_mode=creative','host_cheats=true','host_official_auth=false'):
+                    for line in ('host_pvp=false','host_mode=creative','host_cheats=true','host_official_auth=false','host_difficulty=easy',r'host_game_rules=keepInventory\ true'):
                         self.assertIn(line,properties)
                 else:
                     self.assertNotIn('host_',properties)

@@ -723,12 +723,22 @@ class Window(ctk.CTk):
         self.host_cheats=tk.BooleanVar(value=e.get("cheats",False))
         self.host_auth=tk.BooleanVar(value=e.get("official_auth",False))
         self.host_mode=tk.StringVar(value=e.get("mode","随世界"))
-        card=self.card(parent)
+        self.host_difficulty=tk.StringVar(value=e.get("difficulty","随世界"))
+        self.host_time=tk.StringVar(value=e.get("time","随世界"))
+        self.host_weather=tk.StringVar(value=e.get("weather","随世界"))
+        self.host_extras={key:tk.StringVar(value=e.get(key,"")) for key in
+                          ("players","view_distance","simulation_distance","allowlist","game_rules","world_border")}
+        content=ctk.CTkScrollableFrame(parent,fg_color="transparent")
+        content.pack(fill="both",expand=True)
+        card=self.card(content)
         card.pack(fill="x",padx=16,pady=16)
         self.label(card,"Host 联机预设",20,bold=True).pack(anchor="w",padx=20,pady=(16,4))
         self.label(card,"仅在本机接管共享世界并开放局域网时应用。",13,MUTED).pack(anchor="w",padx=20,pady=(0,12))
         for title,values,variable in (
             ("玩家对战",["随世界","允许","禁止"],self.host_pvp),
+            ("开服时段",["随世界","白天","正午","夜晚","午夜"],self.host_time),
+            ("开服天气",["随世界","晴天","下雨","雷暴"],self.host_weather),
+            ("难度",["随世界","和平","简单","普通","困难"],self.host_difficulty),
             ("默认游戏模式",["随世界","生存","创造","冒险","旁观"],self.host_mode),
         ):
             row=ctk.CTkFrame(card,fg_color="transparent")
@@ -738,11 +748,27 @@ class Window(ctk.CTk):
         for title,variable in (("允许作弊",self.host_cheats),("要求 Minecraft 正版验证",self.host_auth)):
             ctk.CTkSwitch(card,text=title,variable=variable,onvalue=True,offvalue=False).pack(anchor="w",padx=20,pady=8)
         self.label(card,"正版验证使用 Minecraft 官方认证。离线玩家无法加入，LittleSkin 不能用于开启正版验证的 Host。",12,MUTED).pack(anchor="w",padx=20,pady=4)
+        for title,key,hint in (
+            ("共享房间玩家上限","players","含 Host，2–100，留空沿用默认"),
+            ("区块视距","view_distance","2–32 区块，留空沿用游戏选项"),
+            ("模拟距离","simulation_distance","5–32 区块，留空沿用游戏选项"),
+            ("世界边界直径","world_border","1–59,999,968 方块，留空保持存档设置"),
+            ("共享房间白名单","allowlist","Aetherloom 账号名，用逗号分隔；留空允许房间成员"),
+            ("游戏规则","game_rules","规则名=值，使用分号分隔，例如 doFireTick=false;keepInventory=true"),
+        ):
+            row=ctk.CTkFrame(card,fg_color="transparent")
+            row.pack(fill="x",padx=20,pady=5)
+            self.label(row,title,13).pack(anchor="w")
+            ctk.CTkEntry(row,textvariable=self.host_extras[key],placeholder_text=hint,height=34).pack(fill="x",pady=3)
+            self.label(row,hint,11,MUTED,wraplength=720).pack(anchor="w")
+        self.label(card,"此模式由 Minecraft 内置局域网服务器运行。独立服务端的绑定地址、固定端口、RCON、Query、资源包推送、种子和世界生成器等设置不可用。共享世界使用现有存档。",12,MUTED,wraplength=720).pack(anchor="w",padx=20,pady=(12,0))
         self.button(card,"保存预设",self.save,True).pack(anchor="e",padx=20,pady=16)
 
     def host_presets(self):
         return dict(pvp=self.host_pvp.get(),mode=self.host_mode.get(),
-                    cheats=self.host_cheats.get(),official_auth=self.host_auth.get())
+                    cheats=self.host_cheats.get(),official_auth=self.host_auth.get(),
+                    difficulty=self.host_difficulty.get(),time=self.host_time.get(),weather=self.host_weather.get(),
+                    **{key:var.get().strip() for key,var in self.host_extras.items()})
 
     def build_cloud(self):
         p=self.pages["cloud"]
@@ -846,6 +872,12 @@ class Window(ctk.CTk):
 
     def save(self):
         self.remember_profile()
+        try:
+            from .game_control import validate_host_settings
+            validate_host_settings(self.host_presets())
+        except ValueError as error:
+            self.note(str(error),True)
+            return False
         try:self.settings.save(dict({k:v.get().strip() for k,v in self.values.items()},host_presets=self.host_presets(),offline_profiles=self.offline_profiles,theme=self.theme,room_bindings=self.bindings,auto_run_path=self.auto_run,selected_room=self.selected_room,local_profiles=self.profiles))
         except OSError as e:self.note("配置保存失败："+str(e),True);return False
         self.refresh_summary();self.maybe_refresh_worlds();self.note("配置已保存");return True

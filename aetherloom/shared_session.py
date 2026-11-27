@@ -14,7 +14,7 @@ from .network import Network,verify_host_listener
 from .world_lock import closed_world
 from .runtime import hidden_process
 from .environment import describe,validate
-from .game_control import select_backend,agent_config,check_agent_package
+from .game_control import select_backend,agent_config,check_agent_package,validate_host_settings
 from .vanilla_control import CALAMUS_VANILLA_RELEASES,FABRIC_114_RELEASES,name_data_identity
 
 
@@ -209,6 +209,7 @@ class SharedSession:
                 self.state('complete',message='Player已退出，不上传共同世界')
                 return
             presets=self.binding.get("host_presets",{})
+            host_limits=validate_host_settings(presets)
             if self.game_auth and presets.get("official_auth"):
                 raise ValueError("正版验证不能与 LittleSkin 外置认证同时启用。请关闭正版验证或切换 Host 游戏身份。")
             b=self.binding;world=Path(b['world']).resolve()
@@ -251,7 +252,8 @@ class SharedSession:
                 if self.bridge.saved.is_set() or self.process.poll() is not None:
                     raise ValueError('世界在联机就绪前已退出，本地存档保留')
                 self.guard.check()
-                host_task=self.network.spawn(self.network.host(self.room,self.bridge.port,on_identity=self.bridge.register_peer))
+                host_task=self.network.spawn(self.network.host(self.room,self.bridge.port,on_identity=self.bridge.register_peer,
+                    max_players=host_limits.get("players"),allowed_players=host_limits["allowlist"]))
                 await asyncio.to_thread(self.api,base+'/ready',credentials)
                 self.state('ready',lan_port=self.bridge.port,message='Host世界与LAN已就绪，等待其他玩家连接；尚无隧道流时不会显示已中继或已直连')
                 self.notify('status','Host已就绪，正在等待其他玩家连接')
