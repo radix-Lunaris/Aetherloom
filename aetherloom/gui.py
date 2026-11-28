@@ -21,74 +21,53 @@ from .game_accounts import GameAccounts
 from .network_status import probe_nat,human_bytes
 from .diagnostics import setup, logger, safe, event
 
-BG=("#F3F6FB","#101116")
-SIDE=("#FFFFFF","#17181F")
-CARD=("#FFFFFF","#1B1D27")
-BORDER=("#D6DFEC","#2B2D3B")
-TEXT=("#162940","#F0F0F6")
-MUTED=("#52647B","#9698AD")
-ACCENT=("#215DB6","#A69BFF")
-PRIMARY=("#245DC0","#7564E8")
+# Palette and sizing follow the MCSync desktop design tokens.
+BG=("#f4f5f7","#1b1b1f")
+CARD=("#ffffff","#24242a")
+SIDE=CARD
+SURFACE=("#f0f1f4","#2c2c34")
+HOVER=("#e6e8ec","#35353f")
+BORDER=("#dcdfe5","#3a3a44")
+OUTLINE=("#c6cad2","#4a4a56")
+TEXT=("#22232a","#ececf1")
+SECONDARY=("#565a66","#b0b0bd")
+MUTED=("#71757f","#90909a")
+ACCENT=("#234fc1","#7aa2ff")
+PRIMARY=("#2f6bff","#5b8cff")
+PRIMARY_HOVER=("#1f57e0","#7aa2ff")
+SELECTED=("#e4ecff","#2b3550")
+DANGER=("#c8342b","#ff8580")
 
-class ChoiceMenu(ctk.CTkOptionMenu):
-    """Search long lists without changing the selected value while filtering."""
-    def _open_dropdown_menu(self):
-        values=self.cget("values")
-        if not values or self.cget("state")=="disabled":
-            return
-        popup=ctk.CTkToplevel(self)
-        popup.transient(self.winfo_toplevel())
-        popup.overrideredirect(True)
 
-        width=max(self.winfo_width(),240)
-        height=min(340,42+len(values)*26)
-        left=max(0,min(self.winfo_rootx(),self.winfo_screenwidth()-width))
-        top=self.winfo_rooty()+self.winfo_height()+4
-        if top+height>self.winfo_screenheight():
-            top=max(0,self.winfo_rooty()-height-4)
-        popup.geometry(f"{width}x{height}+{left}+{top}")
-        frame=ctk.CTkFrame(popup,fg_color=CARD,border_width=1,border_color=BORDER,corner_radius=10)
-        frame.pack(fill="both",expand=True)
-        search=ctk.CTkEntry(frame,placeholder_text="搜索选项")
-        if len(values)>=5:
-            search.pack(fill="x",padx=9,pady=(7,4))
-        dark=ctk.get_appearance_mode()=="Dark"
-        items=tk.Listbox(frame,activestyle="none",borderwidth=0,highlightthickness=0,
-            font=self.cget("font"),bg=CARD[int(dark)],fg=TEXT[int(dark)],
-            selectbackground=PRIMARY[int(dark)],selectforeground="white")
-        items.pack(fill="both",expand=True,padx=12,pady=(0,12))
-        def populate(*_):
-            query=search.get().casefold()
-            items.delete(0,"end")
-            for item in values:
-                if query in item.casefold():
-                    items.insert("end",item)
-            if items.size():
-                index=next((i for i in range(items.size()) if items.get(i)==self.get()),0)
-                items.selection_set(index)
-                items.see(index)
-        def choose(*_):
-            selection=items.curselection()
-            if selection:
-                value=items.get(selection[0])
-                popup.destroy()
-                self._dropdown_callback(value)
-        populate()
-        search.bind("<KeyRelease>",populate)
-        search.bind("<Down>",lambda _:items.focus_set())
-        search.bind("<Return>",choose)
-        items.bind("<Return>",choose)
-        items.bind("<ButtonRelease-1>",choose)
-        popup.bind("<Escape>",lambda _:popup.destroy())
-        def outside(event):
-            if not (left<=event.x_root<left+width and top<=event.y_root<top+height):
-                popup.destroy()
-        popup.bind("<ButtonPress-1>",outside)
-        def activate():
-            popup.grab_set()
-            (search if len(values)>=5 else items).focus_set()
-        popup.after(40,activate)
+def apply_widget_theme():
+    theme=ctk.ThemeManager.theme
+    theme["CTkFrame"].update(fg_color=CARD,top_fg_color=SURFACE,border_color=BORDER,corner_radius=10)
+    theme["CTkLabel"].update(text_color=TEXT)
+    theme["CTkEntry"].update(fg_color=SURFACE,border_color=OUTLINE,text_color=TEXT,placeholder_text_color=MUTED,corner_radius=6)
+    theme["CTkButton"].update(fg_color=PRIMARY,hover_color=PRIMARY_HOVER,corner_radius=6)
+    theme["CTkTextbox"].update(fg_color=SURFACE,border_color=BORDER,text_color=TEXT,corner_radius=6)
+    theme["CTkSegmentedButton"].update(fg_color=SURFACE,selected_color=SELECTED,
+        selected_hover_color=SELECTED,unselected_color=SURFACE,unselected_hover_color=HOVER,text_color=TEXT)
+    for key in ("CTkCheckBox","CTkRadioButton","CTkSwitch","CTkSlider","CTkProgressBar"):
+        if key=="CTkProgressBar":
+            theme[key].update(fg_color=SURFACE,progress_color=PRIMARY)
+        elif key=="CTkSlider":
+            theme[key].update(fg_color=SURFACE,progress_color=PRIMARY,button_color=PRIMARY,button_hover_color=PRIMARY_HOVER)
+        elif key=="CTkSwitch":
+            theme[key].update(fg_color=OUTLINE,progress_color=PRIMARY,button_color=CARD,button_hover_color=HOVER,text_color=TEXT)
+        else:
+            theme[key].update(fg_color=PRIMARY,hover_color=PRIMARY_HOVER,border_color=OUTLINE,text_color=TEXT)
 
+
+class ChoiceMenu(ctk.CTkComboBox):
+    """MCSync-style inline select backed by CustomTkinter's native menu."""
+    def __init__(self, parent, *, values, variable=None, width=160, height=34, command=None, **kwargs):
+        super().__init__(parent,values=values,variable=variable,width=width,height=height,command=command,
+                         state="readonly",fg_color=SURFACE,border_color=OUTLINE,border_width=1,
+                         button_color=OUTLINE,button_hover_color=HOVER,text_color=TEXT,
+                         dropdown_fg_color=CARD,dropdown_hover_color=SELECTED,dropdown_text_color=TEXT,
+                         corner_radius=6,font=kwargs.get("font",("Microsoft YaHei UI",12)),
+                         dropdown_font=("Microsoft YaHei UI",12))
 
 def physical_memory_mib():
     """Return installed and available physical memory from Windows."""
@@ -134,6 +113,7 @@ class Settings:
 
 class Window(ctk.CTk):
     def __init__(self,config_dir=None):
+        apply_widget_theme()
         super().__init__()
         self.title("Aetherloom")
         mark=Path(__file__).with_name("panel")/"mark.ico"
@@ -204,36 +184,36 @@ class Window(ctk.CTk):
             self.values['url'].set('https://artherlink.superyk7hero.online:47192')
         self.values["java"]=tk.StringVar(value=saved_java if saved_java and Path(saved_java).is_file() else "")
         self.password=tk.StringVar()
-        self.grid_rowconfigure(0,weight=1)
+        self.grid_rowconfigure(1,weight=1)
         self.grid_columnconfigure(1,weight=1)
-        self.sidebar=ctk.CTkFrame(self,width=216,corner_radius=0,fg_color=SIDE)
-        self.sidebar.grid(row=0,column=0,sticky="nsew")
+        self.top=ctk.CTkFrame(self,fg_color=CARD,corner_radius=0)
+        self.top.grid(row=0,column=0,columnspan=2,sticky="ew")
+        self.label(self.top,"Aetherloom",18,TEXT,True).pack(side="left",padx=(20,16),pady=12)
+        self.breadcrumb=self.label(self.top,"开始游戏",12,MUTED)
+        self.breadcrumb.pack(side="left")
+        self.sidebar=ctk.CTkFrame(self,width=212,corner_radius=0,fg_color=SIDE)
+        self.sidebar.grid(row=1,column=0,sticky="nsew",padx=(0,1))
         self.sidebar.grid_propagate(False)
-        self.sidebar.grid_rowconfigure(8,weight=1)
-        self.label(self.sidebar,"A",size=30,color=ACCENT,bold=True).grid(row=0,column=0,sticky="w",padx=28,pady=(30,4))
-        self.label(self.sidebar,"Aetherloom",size=21,bold=True).grid(row=1,column=0,sticky="w",padx=28)
-        self.label(self.sidebar,"让世界，继续。",size=12,color=MUTED).grid(row=2,column=0,sticky="w",padx=28,pady=(4,34))
+        self.sidebar.grid_columnconfigure(0,weight=1)
+        self.sidebar.grid_rowconfigure(6,weight=1)
+        self.label(self.sidebar,"工作台",12,MUTED,True).grid(row=0,column=0,sticky="w",padx=16,pady=(16,8))
         self.nav={}
-        for row,(key,title) in enumerate([("home","开始游戏"),("instance","本地游戏"),("cloud","共享世界"),("network","联机状态"),("logs","运行记录")],3):
-            b=ctk.CTkButton(self.sidebar,text=title,anchor="w",width=176,height=44,
-                corner_radius=8,fg_color="transparent",hover_color=("#DDE9F7","#252633"),
-                text_color=MUTED,font=self.font(14),command=lambda k=key:self.show(k))
-            b.grid(row=row,column=0,padx=20,pady=4)
-            self.nav[key]=b
-        foot=ctk.CTkFrame(self.sidebar,fg_color=("#EDF2F9","#20212D"),corner_radius=10)
-        foot.grid(row=9,column=0,padx=20,pady=(20,14),sticky="ew")
-        self.label(foot,"游戏身份",size=12,color=ACCENT).pack(anchor="w",padx=14,pady=(12,2))
-        self.identity=self.label(foot,self.values["name"].get(),size=14,bold=True)
-        self.identity.pack(anchor="w",padx=14,pady=(0,12))
-        self.label(self.sidebar,'v'+__version__,size=11,color="#696C81").grid(row=10,column=0,sticky="w",padx=28,pady=(0,24))
+        for row,(key,title) in enumerate([("home","开始游戏"),("instance","本地游戏"),("cloud","共享世界"),("network","联机状态"),("logs","运行记录")],1):
+            button=ctk.CTkButton(self.sidebar,text=title,anchor="w",height=36,corner_radius=6,
+                fg_color="transparent",hover_color=HOVER,text_color=SECONDARY,font=self.font(13),
+                command=lambda name=key:self.show(name))
+            button.grid(row=row,column=0,sticky="ew",padx=12,pady=3)
+            self.nav[key]=button
+        foot=ctk.CTkFrame(self.sidebar,fg_color=SURFACE,corner_radius=10)
+        foot.grid(row=7,column=0,padx=12,pady=(12,8),sticky="ew")
+        self.label(foot,"游戏身份",11,MUTED).pack(anchor="w",padx=12,pady=(8,2))
+        self.identity=self.label(foot,self.values["name"].get(),13,bold=True)
+        self.identity.pack(anchor="w",padx=12,pady=(0,8))
+        self.label(self.sidebar,'v'+__version__,11,MUTED).grid(row=8,column=0,sticky="w",padx=16,pady=(0,16))
         self.body=ctk.CTkFrame(self,fg_color=BG,corner_radius=0)
-        self.body.grid(row=0,column=1,sticky="nsew",padx=34,pady=28)
+        self.body.grid(row=1,column=1,sticky="nsew",padx=20,pady=16)
         self.body.grid_columnconfigure(0,weight=1)
         self.body.grid_rowconfigure(2,weight=1)
-        self.top=ctk.CTkFrame(self.body,fg_color="transparent")
-        self.top.grid(row=0,column=0,sticky="ew",pady=(0,18))
-        self.breadcrumb=self.label(self.top,"工作台  /  开始游戏",size=12,color=MUTED)
-        self.breadcrumb.pack(side="left")
         themes={"跟随系统":"system","亮色":"light","暗色":"dark"}
         def change_theme(label):
             self.theme=themes[label]
@@ -270,39 +250,32 @@ class Window(ctk.CTk):
         self.after(100,self.drain)
         self.after(1000,self.poll_game)
 
-    def font(self,size=14,bold=False):
-        return ctk.CTkFont(family="Microsoft YaHei" if os.name=="nt" else "sans-serif",size=size,weight="bold" if bold else "normal")
+    def font(self,size=13,bold=False):
+        return ctk.CTkFont(family="Microsoft YaHei UI" if os.name=="nt" else "sans-serif",size=size,weight="bold" if bold else "normal")
 
     def label(self,parent,text,size=14,color=TEXT,bold=False,**kw):
         return ctk.CTkLabel(parent,text=text,font=self.font(size,bold),text_color=color,anchor="w",**kw)
 
     def button(self,parent,text,command,primary=False,**kw):
-        return ctk.CTkButton(parent,text=text,command=command,height=40,corner_radius=8,
-            fg_color=PRIMARY if primary else "#2A2C3B",hover_color="#8878F0" if primary else "#36394B",
+        return ctk.CTkButton(parent,text=text,command=command,height=34,corner_radius=6,
+            fg_color=PRIMARY if primary else SURFACE,hover_color=PRIMARY_HOVER if primary else HOVER,
             text_color="#FFFFFF" if primary else TEXT,font=self.font(13,primary),**kw)
 
     def card(self,parent,**kw):
-        return ctk.CTkFrame(parent,fg_color=CARD,border_color=BORDER,border_width=1,corner_radius=12,**kw)
+        return ctk.CTkFrame(parent,fg_color=CARD,border_color=BORDER,border_width=1,corner_radius=10,**kw)
 
     def entry(self,parent,key,placeholder=""):
         return ctk.CTkEntry(parent,textvariable=self.values[key],height=40,
-            fg_color=("#F7F9FC","#13151D"),border_color=BORDER,border_width=1,corner_radius=7,
+            fg_color=SURFACE,border_color=BORDER,border_width=1,corner_radius=7,
             text_color=TEXT,placeholder_text=placeholder,font=self.font(13))
 
     def heading(self,parent,title,subtitle):
-        self.label(parent,title,26,bold=True).pack(anchor="w")
+        self.label(parent,title,20,bold=True).pack(anchor="w")
         self.label(parent,subtitle,13,MUTED).pack(anchor="w",pady=(4,20))
 
     def build_home(self):
         p=self.pages["home"]
-        self.heading(p,"开始你的下一段旅程","离线进入游戏主菜单，在线接续选中的共享世界。")
-        hero=self.card(p,height=206)
-        hero.pack(fill="x",pady=(0,18))
-        hero.pack_propagate(False)
-        self.label(hero,"YOUR NEXT CHAPTER",11,ACCENT,True).pack(anchor="w",padx=26,pady=(24,4))
-        self.label(hero,"世界，在此延续。",32,bold=True).pack(anchor="w",padx=26)
-        self.label(hero,"用熟悉的离线身份，开启今天的冒险。",14,MUTED).pack(anchor="w",padx=26,pady=(8,14))
-        self.button(hero,"配置游戏实例  →",lambda:self.show("instance"),width=152).pack(anchor="w",padx=26)
+        self.heading(p,"开始游戏","启动本地实例，或接续已经绑定的共享世界。")
         row=ctk.CTkFrame(p,fg_color="transparent")
         row.pack(fill="x",pady=(0,18));row.grid_columnconfigure((0,1),weight=1)
         left=self.card(row);left.grid(row=0,column=0,sticky="nsew",padx=(0,8))
@@ -792,7 +765,7 @@ class Window(ctk.CTk):
             self.label(card,title,12,MUTED).grid(row=4,column=col,sticky="w",padx=22)
         self.entry(card,"username").grid(row=5,column=0,sticky="ew",padx=(22,8),pady=6)
         self.password_entry=ctk.CTkEntry(card,textvariable=self.password,show="•",height=40,
-            fg_color=("#F7F9FC","#13151D"),border_color=BORDER,font=self.font(13))
+            fg_color=SURFACE,border_color=BORDER,font=self.font(13))
         self.password_entry.grid(row=5,column=1,sticky="ew",padx=(8,22),pady=6)
         self.password_entry.bind("<Return>",lambda _:self.login())
         remember=ctk.CTkCheckBox(card,text="在此 Windows 账号下记住登录（30 天）",variable=self.remember_login)
@@ -840,7 +813,7 @@ class Window(ctk.CTk):
 
     def show(self,name):
         self.page=name;self.pages[name].tkraise()
-        for key,b in self.nav.items():b.configure(fg_color=("#DEEAFB","#302B49") if key==name else "transparent",text_color=ACCENT if key==name else MUTED)
+        for key,b in self.nav.items():b.configure(fg_color=SELECTED if key==name else "transparent",text_color=ACCENT if key==name else MUTED)
         self.breadcrumb.configure(text="工作台  /  "+{"home":"开始游戏","instance":"本地游戏","cloud":"共享世界","network":"联机状态","logs":"运行记录"}[name])
         self.refresh_summary()
 
@@ -858,7 +831,7 @@ class Window(ctk.CTk):
 
     def note(self,message,error=False):
         message=safe(message)
-        self.notice.configure(text=message[:115],text_color="#F0AF9C" if error else MUTED)
+        self.notice.configure(text=message[:115],text_color=DANGER if error else MUTED)
         logger.log(40 if error else 20,message)
         line=time.strftime("%H:%M:%S")+("  ERROR  " if error else "  INFO  ")+message
         self.logs.append(line)
@@ -924,13 +897,14 @@ class Window(ctk.CTk):
         threading.Thread(target=run,daemon=True).start()
 
     def drain(self):
-        while True:
+        deadline=time.monotonic()+.012
+        while time.monotonic()<deadline:
             try:callback,result,_=self.events.get_nowait()
             except queue.Empty:break
             if _!='notification':self.pending-=1
             try:callback(result)
             except Exception as e:self.fail(str(e))
-        self.after(100,self.drain)
+        self.after(16 if not self.events.empty() else 100,self.drain)
 
     def fail(self,message):
         self.note(message,True)
@@ -1027,7 +1001,7 @@ class Window(ctk.CTk):
                 self.note("已登录，但 Windows 未能保存登录状态",True)
         def failed(message):
             self.login_busy=False;self.login_button.configure(state="normal",text="登录服务器")
-            self.cloud_state.configure(text="连接未完成",text_color="#F0AF9C")
+            self.cloud_state.configure(text="连接未完成",text_color=DANGER)
             self.connection.configure(text="●  本地模式");self.home_connection.configure(text="本地模式");self.note(message,True)
         self.task(lambda:self.request(url,"","/api/login",{"username":username,"password":password,**({"remember":True} if remember else {})}),done,failed)
 
@@ -1084,6 +1058,8 @@ class Window(ctk.CTk):
             self.rooms_busy=False
             if token!=self.token or url!=self.server_url:return
             self.refresh_failures=0
+            now=time.time()
+            items=[dict(item,state="recovery_required") if item.get("host") and item.get("expires",0)<=now else item for item in items]
             self.room_items={item['id']:item for item in items}
             scroll=self.room_list._parent_canvas.yview()[0]
             for child in self.room_list.winfo_children():
@@ -1093,16 +1069,16 @@ class Window(ctk.CTk):
             self.refresh_summary()
             if not items:self.label(self.room_list,"暂无共享房间 · 先配置游戏，再发布一个本地世界。",13,MUTED).pack(pady=30);return
             for item in items:
-                signature=json.dumps([item,self.bindings.get(item['id']),bool(self.bindings.get(item['id']) and (Path(self.bindings[item['id']]['world'])/'.aetherloom/pending-session.json').is_file())],sort_keys=True)
+                signature=json.dumps([{key:value for key,value in item.items() if key!='expires'},self.bindings.get(item['id']),bool(self.bindings.get(item['id']) and (Path(self.bindings[item['id']]['world'])/'.aetherloom/pending-session.json').is_file())],sort_keys=True)
                 old=self.room_rows.get(item['id'])
                 if old and old[1]==signature:continue
                 if old:old[0].destroy()
-                row=ctk.CTkFrame(self.room_list,fg_color=("#EEF3FA","#232532"),corner_radius=8);row.pack(fill="x",padx=8,pady=5)
+                row=ctk.CTkFrame(self.room_list,fg_color=SURFACE,corner_radius=8);row.pack(fill="x",padx=8,pady=5)
                 self.room_rows[item['id']]=(row,signature)
                 top=ctk.CTkFrame(row,fg_color='transparent');top.pack(fill='x',padx=14,pady=(10,4))
                 self.label(top,item.get('name') or item['id'][:12],14,bold=True).pack(side='left')
                 self.label(top,("Host "+item["host"]) if item.get("host") else "当前无 Host",12,ACCENT).pack(side='right')
-                self.label(row,(item.get('environment') or '未设置环境')+' · 所有者 '+item['owner']+' · '+({'idle':'可接管','preparing':'准备中','ready':'可加入','uploading':'上传中'}.get(item['state'],item['state'])),11,MUTED).pack(anchor='w',padx=14)
+                self.label(row,(item.get('environment') or '未设置环境')+' · 所有者 '+item['owner']+' · '+({'idle':'可接管','preparing':'准备中','recovery_required':'Host 已断开 · 可按云端副本恢复','ready':'可加入','uploading':'上传中'}.get(item['state'],item['state'])),11,MUTED).pack(anchor='w',padx=14)
                 bound=self.bindings.get(item['id'])
                 if bound:
                     hint=self.label(row,'本机 '+bound['version']+' · '+bound['name']+'\n存档 '+bound['world'],11,MUTED)
@@ -1370,6 +1346,7 @@ class Window(ctk.CTk):
         self.cloud_task('/api/me',done,{'username' if choice=='改名' else 'password':value},method='PATCH')
 
     def play_room(self,room):
+        room=self.room_items.get(room["id"],room)
         if self.transfer_active:self.note('请先完成当前传输任务',True);return
         if self.shared or self.launching or (self.process and self.process.poll() is None):self.note('已有游戏或共享任务运行，请先退出',True);return
         if room['id'] not in self.bindings:self.bind_room(room);return
@@ -1397,7 +1374,8 @@ class Window(ctk.CTk):
                 elif kind=='progress':self.transfer_status(value)
                 else:self.note(value)
             self.events.put((apply,None,'notification'))
-        self.selected_room=room['id'];self.save()
+        self.selected_room=room['id']
+        if not self.save():return
         try:
             self.shared=session_type(self.server_url,self.token,self.settings.path.parent/'cache',room['id'],dict(self.bindings[room['id']],host_presets=self.host_presets()),notify,recovery,game_accounts=self.game_accounts)
         except (ValueError, OSError, KeyError) as error:
@@ -1414,8 +1392,10 @@ class Window(ctk.CTk):
         self.session_status({'room':room['id'],'phase':'preflight','role':'待确认','mode':room.get('mode','AUTO'),'message':'在线启动已提交，正在核验环境和权威版本'})
         self.begin_transfer('online','准备在线会话')
         self.launching=True;self.online.configure(state='disabled',text='在线准备中…');self.start.configure(state='disabled')
+        self.cancel_session.configure(state='normal');self.cancel_session.grid()
         def finished(_):
             self.shared=None;self.launching=False
+            self.cancel_session.grid_remove()
             if self.transfer_active:self.finish_transfer(self.session_info.get('phase')=='complete','会话已完成' if self.session_info.get('phase')=='complete' else '会话结束，未完成的同步未记为成功')
             self.online.configure(state='normal',text='在线启动   →')
             self.start.configure(state='normal' if not self.process or self.process.poll() is not None else 'disabled',text='离线启动   →')
@@ -1646,6 +1626,15 @@ class Window(ctk.CTk):
         self.transfer_number.grid(row=0,column=1,sticky='e',padx=12,pady=(8,3))
         self.transfer_bar=ctk.CTkProgressBar(panel,height=8,progress_color=PRIMARY,fg_color=BORDER)
         self.transfer_bar.grid(row=1,column=0,columnspan=2,sticky='ew',padx=12,pady=(0,10));self.transfer_bar.set(0)
+        self.cancel_session=self.button(panel,"停止在线会话",self.cancel_online_launch,width=100)
+        self.cancel_session.grid(row=0,column=2,rowspan=2,padx=(0,12))
+        self.cancel_session.grid_remove()
+
+    def cancel_online_launch(self):
+        if self.shared:
+            self.shared.stop=True
+            self.cancel_session.configure(state="disabled")
+            self.note("已请求停止在线会话，正在结束当前步骤并处理已启动的世界。")
 
     def begin_transfer(self,operation,message):
         self.transfer_operation=operation;self.transfer_active=True;self.transfer_percent=0.
@@ -1672,7 +1661,7 @@ class Window(ctk.CTk):
         self.transfer_bar.stop();self.transfer_bar.configure(mode='determinate',progress_color=PRIMARY if success else '#D48B79')
         if success:self.transfer_percent=100.
         self.transfer_bar.set(self.transfer_percent/100);self.transfer_active=False
-        self.transfer_label.configure(text=safe(message)[:105],text_color=MUTED if success else '#F0AF9C')
+        self.transfer_label.configure(text=safe(message)[:105],text_color=MUTED if success else DANGER)
         self.transfer_number.configure(text='100.0%' if success else f'未完成 · {self.transfer_percent:.1f}%')
 
     def session_status(self,state):
@@ -1682,7 +1671,7 @@ class Window(ctk.CTk):
         details=f"实例：{item.get('name',room)}\n角色：{state.get('role','待确认')} · 策略：{state.get('mode','AUTO')} · 状态：{names.get(state.get('phase'),state.get('phase',''))}"
         details+=f"\n代次：{state.get('epoch') if state.get('epoch') is not None else '待确认'} · LAN端口：{state.get('lan_port') or '尚未就绪'} · 已就绪对端：{state.get('players',0)}"
         if state.get('message'):details+='\n'+safe(state['message'])
-        self.network_summary.configure(text=details,text_color='#F0AF9C' if state.get('phase')=='failed' else TEXT)
+        self.network_summary.configure(text=details,text_color=DANGER if state.get('phase')=='failed' else TEXT)
         self.runtime_values['state'].configure(text=names.get(state.get('phase'),state.get('phase','未启动')))
         self.runtime_values['role'].configure(text=state.get('role','待确认'))
         self.runtime_values['room'].configure(text=item.get('name',room) or '未选择')

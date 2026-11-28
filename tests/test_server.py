@@ -11,6 +11,25 @@ except ImportError:
 
 @unittest.skipUnless(AVAILABLE,"Install server dependencies")
 class ServerTests(unittest.TestCase):
+    def test_expired_preparing_room_is_recoverable_without_losing_lease_evidence(self):
+        with tempfile.TemporaryDirectory() as d:
+            app=create_app(d)
+            store=app.state.store
+            add_user(store,"host","test-password","player")
+            with TestClient(app) as client:
+                session=client.post("/api/login",json={"username":"host","password":"test-password"}).json()
+                headers={"Authorization":"Bearer "+session["token"]}
+                room=client.post("/api/rooms",headers=headers,json={"name":"for test"}).json()["id"]
+                lease=client.post(f"/api/rooms/{room}/claim",headers=headers,json={}).json()
+                self.assertEqual(client.get("/api/rooms",headers=headers).json()[0]["state"],"preparing")
+                with store.connect() as connection:
+                    connection.execute("UPDATE rooms SET expires=1 WHERE id=?",(room,))
+                self.assertEqual(client.get("/api/rooms",headers=headers).json()[0]["state"],"recovery_required")
+                self.assertEqual(client.post(f"/api/rooms/{room}/claim",headers=headers,json={}).status_code,409)
+                recovered=client.post(f"/api/rooms/{room}/claim",headers=headers,json={"confirm_recovery":True})
+                self.assertEqual(recovered.status_code,200)
+                self.assertEqual(recovered.json()["epoch"],lease["epoch"]+1)
+
     def test_auth_roles_and_lease_upload(self):
         with tempfile.TemporaryDirectory() as d:
             app=create_app(d);s=app.state.store

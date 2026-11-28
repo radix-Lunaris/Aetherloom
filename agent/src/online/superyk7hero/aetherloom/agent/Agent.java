@@ -43,6 +43,8 @@ public final class Agent {
     static final Set<String> reports=Collections.synchronizedSet(new HashSet<String>());
     static final AtomicBoolean statsPending=new AtomicBoolean();
     static long nextStats;
+    static FutureTask<Void> hostSettings;
+    static long hostSettingsDeadline;
 
     static String fabricBaseline(String version) throws IOException {
         int nearest=Integer.MAX_VALUE;
@@ -462,9 +464,13 @@ public final class Agent {
                 || !hooks.getField("profileInstalled").getBoolean(null)
                 || (earlyProfile && !hooks.getField("profileLookupInstalled").getBoolean(null))
             ))throw new IllegalStateException("Required lifecycle/identity hooks were not installed");
+            boolean inspection=Boolean.parseBoolean(config.getProperty("inspect"));
+            if(!inspection && !hostSettingsReady(mc,server)) {
+                if(stop && !stopping){stopping=true;leave(mc);}
+                return;
+            }
             pending=null;int port=0;
-            if(!Boolean.parseBoolean(config.getProperty("inspect"))) {
-                applyExtendedHostSettings(mc,server);
+            if(!inspection) {
                 boolean cheats=Boolean.parseBoolean(config.getProperty("host_cheats"));
                 boolean official=Boolean.parseBoolean(config.getProperty("host_official_auth"));
                 call(server,"setUsesAuthentication",official || "littleskin".equals(config.getProperty("auth_mode")));
@@ -515,7 +521,21 @@ public final class Agent {
         }
     }
 
-    static void applyExtendedHostSettings(Object mc,Object server) throws Exception {
+    static boolean hostSettingsReady(Object mc,Object server) throws Exception {
+        if(hostSettings!=null) {
+            if(hostSettings.isDone()) {
+                try {hostSettings.get();}
+                catch(ExecutionException failure) {
+                    throw new IllegalStateException("Host settings failed: "+failure.getCause().getMessage(),failure.getCause());
+                }
+                return true;
+            }
+            if(System.nanoTime()>hostSettingsDeadline) {
+                hostSettings.cancel(false);
+                throw new IllegalStateException("Integrated server did not finish applying Host settings");
+            }
+            return false;
+        }
         String difficulty=config.getProperty("host_difficulty");
         String time=config.getProperty("host_time");
         String weather=config.getProperty("host_weather");
@@ -542,12 +562,12 @@ public final class Agent {
                 for(Map.Entry<String,Object> command:parsed.entrySet())source.run(command.getKey(),command.getValue());
                 return null;
             });
+            hostSettings=settings;
+            hostSettingsDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);
             ((Executor)server).execute(settings);
-            try {settings.get(8,TimeUnit.SECONDS);}
-            catch(ExecutionException failure) {
-                throw new IllegalStateException("Host settings failed: "+failure.getCause().getMessage(),failure.getCause());
-            }
+            return false;
         }
+        return true;
     }
     static void applyHostPvp(Object server,boolean enabled) throws Exception {
         try {call(server,"setPvpAllowed",enabled);return;}

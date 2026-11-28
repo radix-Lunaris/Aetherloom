@@ -9,3 +9,17 @@ dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);
 .login-card{padding:clamp(18px,3vw,42px);border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--surface) 76%,transparent);backdrop-filter:blur(16px)}
 [data-theme="light"] :is(input,select,textarea,.login-story,.login-form-area,.sidebar,.main-area,.surface,.metric){color:var(--text);background-color:var(--surface)}
 [data-theme="light"] :is(input,select,textarea){border-color:var(--line)}
+
+/* Shared palette and control scale with the MCSync-style desktop. */
+:root{--bg:#1b1b1f;--side:#24242a;--surface:#24242a;--line:#3a3a44;--text:#ececf1;--muted:#b0b0bd;--accent:#7aa2ff;--primary:#5b8cff;--field:#2c2c34;--hover:#35353f;--selected:#2b3550}
+:root[data-theme="light"]{--bg:#f4f5f7;--side:#fff;--surface:#fff;--line:#dcdfe5;--text:#22232a;--muted:#565a66;--accent:#234fc1;--primary:#2f6bff;--field:#f0f1f4;--hover:#e6e8ec;--selected:#e4ecff}
+.login-shell{background:var(--bg)}
+.login-story,.login-form-area{background:var(--bg);color:var(--text)}
+.login-card,.surface,.metric{border-radius:10px;background:var(--surface)}
+.login-card{backdrop-filter:none}
+.nav-item.active{background:var(--selected);color:var(--accent)}
+.nav-item:hover{background:var(--hover)}
+:root :is(input,select,textarea){background-color:var(--field);color:var(--text);border-color:var(--line);border-radius:6px}
+:root :is(.primary,.secondary,.logout){border-radius:6px}
+:root :is(.secondary,.logout){background:var(--field);color:var(--text)}
+.page-heading h1{font-size:20px;letter-spacing:normal}

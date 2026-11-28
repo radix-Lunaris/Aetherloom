@@ -26,7 +26,7 @@ function rows(id,data,keys){
  if(old&&old.signature===signature)continue;
  const tr=document.createElement("tr");for(const key of keys){const td=document.createElement("td");let value=item[key];
  if(key==="role"){const badge=document.createElement("span");badge.className="role-badge"+(value==="player"?" player":"");badge.textContent=value;td.append(badge);}
- else{if(key==="disabled")value=value?"已停用":"正常";if(key==="state")value=({idle:"空闲",preparing:"准备中",ready:"已就绪",uploading:"同步中"})[value]||value;if(key==="host"&&!value)value="暂无 Host";td.textContent=String(value??"—");if(key==="id")td.className="cell-id";}
+ else{if(key==="disabled")value=value?"已停用":"正常";if(key==="state")value=({idle:"空闲",preparing:"准备中",recovery_required:"Host 已断开 · 待恢复",ready:"已就绪",uploading:"同步中"})[value]||value;if(key==="host"&&!value)value="暂无 Host";td.textContent=String(value??"—");if(key==="id")td.className="cell-id";}
  tr.append(td);}
  const actions=document.createElement('td');actions.className='row-actions';
  const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='secondary compact';b.textContent=label;b.addEventListener('click',fn);actions.append(b);};

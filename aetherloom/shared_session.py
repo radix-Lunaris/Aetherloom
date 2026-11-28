@@ -40,7 +40,9 @@ def repair(world,java,identity,saved=False,*,name_data=None,publishing=False):
 
 class SharedSession:
     def __init__(self,url,token,cache,room,binding,notify,confirm_recovery=False,game_accounts=None):
-        self.api=API(url,token);self.cloud=CloudWorld(self.api,cache,progress=lambda text:notify('status',text),on_progress=lambda state:notify('progress',state))
+        self.api=API(url,token)
+        self.cache=cache
+        self.cloud=None
         self.room,self.binding,self.notify=room,binding,notify
         self.backend=None;self.name_data=None
         self.game_accounts=game_accounts;self.game_auth=None
@@ -62,6 +64,11 @@ class SharedSession:
                 self.notify('status','联机路径：'+{'relay':'中继','direct':'已验证P2P直连','reconnecting':'正在重连','none':'通道已关闭'}.get(path,str(path)))
         self.network=Network(url,token,self.api,on_status=status)
         self.bridge=None;self.guard=None
+
+    async def open_cache(self):
+        self.cloud=await asyncio.to_thread(
+            CloudWorld,self.api,self.cache,progress=lambda text:self.notify('status',text),
+            on_progress=lambda state:self.notify('progress',state))
 
     def state(self,phase,**fields):
         if phase=='complete':fields['world_players']=0
@@ -153,6 +160,7 @@ class SharedSession:
     async def run(self):
         base='/api/rooms/'+self.room
         try:
+            await self.open_cache()
             self.state('preflight',message='正在检查本地环境、账号权限和云端权威版本')
             self.backend=await asyncio.to_thread(select_backend,self.binding)
             self.notify('status','游戏控制：'+('Agent' if self.backend=='agent' else 'Bridge'))
@@ -219,6 +227,7 @@ class SharedSession:
             if self.backend=='bridge' and not bridge_jar.is_file():raise ValueError('交付包缺少Forge游戏Bridge，禁止把空房间标记为就绪')
             if world.parent!=(Path(b['run']).resolve()/'saves'):
                 raise ValueError('共享世界必须位于所选运行目录的saves下，请重新绑定')
+            if self.stop:raise ValueError("已取消在线启动")
             self.notify('status','正在申请唯一 Host 租约')
             self.state('claiming',role='Host候选',message='正在原子申请唯一Host租约')
             lease=await asyncio.to_thread(self.api,base+'/claim',{'confirm_recovery':self.confirm_recovery})
@@ -229,10 +238,12 @@ class SharedSession:
             try:
                 self.notify('status','正在校验并同步云端权威存档')
                 head=await asyncio.to_thread(self.cloud.download,self.room,world)
+                if self.stop:raise ValueError('已取消在线启动')
                 if head!=lease['head']:raise ValueError('云端版本与租约基准不一致')
                 identity=game_uuid(b['name'],b.get('uuid'))
                 self.notify('status','权威存档同步完成，正在校验玩家数据并启动世界')
                 await asyncio.to_thread(repair,world,b['java'],identity,name_data=self.name_data)
+                if self.stop:raise ValueError('已取消在线启动')
                 self.bridge=self.control(world,identity,game_name=b['name'])
                 pending.parent.mkdir(parents=True,exist_ok=True)
                 pending.write_text(json.dumps({'room':self.room,'parent':head,'epoch':lease['epoch'],'identity':identity,'state':'loading'}),encoding='utf-8')
@@ -294,7 +305,11 @@ class SharedSession:
                         self.process.terminate()
                 if not self.process:
                     # No game process was created, so no world could have been loaded.
-                    await asyncio.to_thread(self.api,base+'/cancel',credentials)
+                    try:
+                        await asyncio.to_thread(self.api,base+'/cancel',credentials)
+                        pending.unlink(missing_ok=True)
+                    except (OSError,ValueError) as cancel_error:
+                        self.notify('status','启动未完成，租约将自动过期：'+str(cancel_error))
                 raise
         except BaseException as error:
             self.state('failed',message=str(error) or '会话已取消；保留本地数据')
@@ -318,6 +333,7 @@ class SharedSession:
 class OfflineInspection(SharedSession):
     """Keep the interrupted original; inspect a copy without publishing LAN."""
     async def run(self):
+        await self.open_cache()
         self.backend=await asyncio.to_thread(select_backend,self.binding)
         environment=await asyncio.to_thread(describe,self.binding['root'],self.binding['version'])
         self.name_data=name_data_identity(self.binding,environment['minecraft'])

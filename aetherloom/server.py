@@ -302,7 +302,10 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, actor TEXT, expires 
             packs={row["room"]:json.loads(row["manifest"]) for row in c.execute("SELECT room,manifest FROM room_modpacks").fetchall()}
             managed={r['room'] for r in c.execute('SELECT room FROM managers WHERE actor=?',(user['name'],)).fetchall()}
         result=[dict(r) for r in rows]
+        now=time.time()
         for room in result:
+            if room.get("host") and room["expires"]<=now:
+                room["state"]="recovery_required"
             if room["id"] in packs:
                 room["required_mods"]={k:v for k,v in packs[room["id"]].items() if k not in optional.get(room["id"],())}
                 room["optional_mods"]=sorted(optional.get(room["id"],()))
